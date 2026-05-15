@@ -4,7 +4,11 @@
 \usepackage{amsmath, amssymb, amsthm}
 \usepackage{bm}
 \usepackage{microtype}
-\usepackage[colorlinks=true, linkcolor=blue, citecolor=blue]{hyperref}
+\usepackage{xcolor}
+\usepackage[colorlinks=true, linkcolor=lightgray, citecolor=lightgray]{hyperref}
+
+\pagecolor[rgb]{0.05,0.05,0.05} %black - background color
+\color[rgb]{0.9,0.9,0.9} %grey - text color
 
 \newtheorem{proposition}{Proposition}
 \newtheorem{definition}{Definition}
@@ -68,7 +72,7 @@ by the estimators of Section~\ref{sec:estimation}.
 
 We use $\Sg \in \R^{p \times p}$, $\Sx \in \R^{d \times d}$ for the marginal
 covariances, $\Sgx = \Cov(G, X) \in \R^{p \times d}$ for the cross-covariance,
-and $\Sxg = \Sgx\T$. For a symmetric positive-definite $S$ we write $S^{1/2}$ for
+and $\Sxg = \Sgx\T$. For a symmetric positive semidefinite $S$ we write $S^{1/2}$ for
 its symmetric square root and $S^{-1/2}$ for the inverse thereof.
 
 \section{The linear--Gaussian generative model}
@@ -103,7 +107,7 @@ isotropic-noise and known-parameter assumptions for practical fitting.
 Under \eqref{eq:prior}--\eqref{eq:structural},
 \begin{equation}
 \begin{pmatrix} G \\ X \end{pmatrix}
-\sim \N\!\left(0,\
+\sim \N\!\left(\bf{0},\
 \begin{pmatrix}
 \Sg & \Sg A\T \\
 A \Sg & A \Sg A\T + \sigma^2 I_d

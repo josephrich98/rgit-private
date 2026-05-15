@@ -106,27 +106,200 @@ isotropic-noise and known-parameter assumptions for practical fitting.
 \label{prop:joint}
 Under \eqref{eq:prior}--\eqref{eq:structural},
 \begin{equation}
-\begin{pmatrix} G \\ X \end{pmatrix}
-\sim \N\!\left(\bf{0},\
 \begin{pmatrix}
-\Sg & \Sg A\T \\
-A \Sg & A \Sg A\T + \sigma^2 I_d
-\end{pmatrix}\right).
+G\\
+X
+\end{pmatrix}
+\sim
+\N\!\left(
+\bf{0},
+\begin{pmatrix}
+\Sg & \Sg A^\top\\
+A\Sg & A\Sg A^\top + \sigma^2 I_d
+\end{pmatrix}
+\right).
 \end{equation}
-In particular the imaging marginal is $X \sim \N(0, \Sx)$ with
+In particular,
 \begin{equation}
-\Sx = A \Sg A\T + \sigma^2 I_d,
+X \sim \N(0,\Sx),
+\qquad
+\Sx = A\Sg A^\top + \sigma^2 I_d,
 \label{eq:sigmax}
 \end{equation}
-and the cross-covariance is $\Sgx = \Sg A\T$.
+and the cross-covariance is
+\begin{equation}
+\Sgx = \Cov(G,X)=\Sg A^\top.
+\end{equation}
 \end{proposition}
 
 \begin{proof}
-$G$ and $\varepsilon$ are jointly Gaussian and independent, and
-$(G, X)$ is a linear image of $(G, \varepsilon)$, hence jointly Gaussian. The
-blocks follow from $\Cov(G,X) = \Cov(G, AG + \varepsilon) = \Sg A\T$ and
-$\Var(X) = A \Sg A\T + \sigma^2 I_d$.
+Since
+\[
+X = AG + \varepsilon,
+\]
+where
+\[
+G \sim \N(0,\Sg),
+\qquad
+\varepsilon \sim \N(0,\sigma^2 I_d),
+\]
+and $G$ and $\varepsilon$ are independent, the stacked vector
+\[
+\begin{pmatrix}
+G\\
+X
+\end{pmatrix}
+=
+\begin{pmatrix}
+G\\
+AG+\varepsilon
+\end{pmatrix}
+\]
+is jointly Gaussian, as it is an affine transformation of independent Gaussian variables.
+
+It therefore suffices to compute its mean and covariance. Since both $G$ and $\varepsilon$ are centered,
+\[
+\E[G]=0,
+\qquad
+\E[\varepsilon]=0,
+\]
+we obtain
+\[
+\E[X]
+=
+A\E[G]+\E[\varepsilon]
+=
+0,
+\]
+and hence
+\[
+\E
+\begin{pmatrix}
+G\\
+X
+\end{pmatrix}
+=
+0.
+\]
+
+Next, the covariance matrix has block form
+\[
+\Cov
+\begin{pmatrix}
+G\\
+X
+\end{pmatrix}
+=
+\begin{pmatrix}
+\Cov(G,G) & \Cov(G,X)\\
+\Cov(X,G) & \Cov(X,X)
+\end{pmatrix}.
+\]
+
+The upper-left block is simply
+\[
+\Cov(G,G)=\Sg.
+\]
+
+For the upper-right block, using $X=AG+\varepsilon$,
+\[
+\Cov(G,X)
+=
+\Cov(G,AG+\varepsilon).
+\]
+By linearity of covariance,
+\[
+\Cov(G,X)
+=
+\Cov(G,AG)+\Cov(G,\varepsilon).
+\]
+Since $G$ and $\varepsilon$ are independent,
+\[
+\Cov(G,\varepsilon)=0,
+\]
+and therefore
+\[
+\Cov(G,X)
+=
+\Cov(G,AG).
+\]
+Using the identity
+\[
+\Cov(U,BV)=\Cov(U,V)B^\top,
+\]
+we obtain
+\[
+\Cov(G,AG)
+=
+\Sg A^\top.
+\]
+Hence
+\[
+\Sgx=\Cov(G,X)=\Sg A^\top.
+\]
+
+The lower-left block is the transpose:
+\[
+\Cov(X,G)
+=
+\Cov(G,X)^\top
+=
+A\Sg.
+\]
+
+Finally, for the lower-right block,
+\[
+\Cov(X,X)
+=
+\Cov(AG+\varepsilon).
+\]
+Expanding the covariance,
+\[
+\Cov(X,X)
+=
+\Cov(AG)+\Cov(\varepsilon),
+\]
+since the cross terms vanish by independence. Using
+\[
+\Cov(AG)=A\Sg A^\top,
+\]
+together with
+\[
+\Cov(\varepsilon)=\sigma^2 I_d,
+\]
+gives
+\[
+\Cov(X,X)
+=
+A\Sg A^\top+\sigma^2 I_d.
+\]
+Therefore
+\[
+\Sx=A\Sg A^\top+\sigma^2 I_d.
+\]
+
+Collecting the covariance blocks yields
+\[
+\Cov
+\begin{pmatrix}
+G\\
+X
+\end{pmatrix}
+=
+\begin{pmatrix}
+\Sg & \Sg A^\top\\
+A\Sg & A\Sg A^\top+\sigma^2 I_d
+\end{pmatrix},
+\]
+which proves the claim.
 \end{proof}
+
+% \begin{proof}
+% $G$ and $\varepsilon$ are jointly Gaussian and independent, and
+% $(G, X)$ is a linear image of $(G, \varepsilon)$, hence jointly Gaussian. The
+% blocks follow from $\Cov(G,X) = \Cov(G, AG + \varepsilon) = \Sg A\T$ and
+% $\Var(X) = A \Sg A\T + \sigma^2 I_d$.
+% \end{proof}
 
 Equation~\eqref{eq:sigmax} is the model's first interpretive statement: imaging
 covariance decomposes additively into a \emph{genomics-driven} component

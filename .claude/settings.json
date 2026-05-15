@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(latexmk *)",
+      "Bash(pdflatex *)",
+      "Bash(jupyter *)",
+      "Bash(python scripts/*)",
+      "Bash(pytest *)",
+      "Bash(pip install *)",
+      "Bash(black *)",
+      "Bash(ruff *)",
+      "Bash(mypy *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // \"\"' | grep -q '\\.tex$' && touch /tmp/rgit-tex-dirty || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f /tmp/rgit-tex-dirty ]; then rm -f /tmp/rgit-tex-dirty; echo '{\"systemMessage\": \"TeX file edited — rebuild with: latexmk -pdf main.tex\"}'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

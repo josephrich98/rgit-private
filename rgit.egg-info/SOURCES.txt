@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+rgit/__init__.py
+rgit/model.py
+rgit.egg-info/PKG-INFO
+rgit.egg-info/SOURCES.txt
+rgit.egg-info/dependency_links.txt
+rgit.egg-info/requires.txt
+rgit.egg-info/top_level.txt

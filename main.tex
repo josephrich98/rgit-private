@@ -1,2 +1,485 @@
+\documentclass[11pt]{article}
 
-\alpha
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{bm}
+\usepackage{microtype}
+\usepackage[colorlinks=true, linkcolor=blue, citecolor=blue]{hyperref}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+\newtheorem{corollary}{Corollary}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Sg}{\Sigma_{G}}
+\newcommand{\Sx}{\Sigma_{X}}
+\newcommand{\Sgx}{\Sigma_{GX}}
+\newcommand{\Sxg}{\Sigma_{XG}}
+\newcommand{\Sgcx}{\Sigma_{G\mid X}}
+\newcommand{\T}{^{\top}}
+
+\title{Image-Identifiable Genomic Subspaces:\\
+A Linear--Gaussian Model of Radiogenomic Recoverability}
+\author{Radiogenomic Information-Theoretic Bounds Project}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We develop a linear--Gaussian generative model linking patient-level genomic
+profiles $g \in \R^{p}$ to imaging phenotypes $x \in \R^{d}$, and use it to ask
+a sharper question than ``does imaging predict gene $j$?'' Instead we ask
+\emph{which low-dimensional genomic subspaces are image-identifiable}. Under the
+model every quantity of interest is available in closed form: the Bayes-optimal
+estimator $\E[g \mid x]$, the posterior covariance $\Sgcx$, the mutual
+information $I(g;x)$, and a per-direction \emph{recoverability score}
+$R(v) \in [0,1]$. We show that the directions of maximal recoverability solve a
+generalized eigenproblem that coincides exactly with canonical correlation
+analysis (CCA) between the two modalities, and that the recoverability of the
+$i$-th canonical genomic direction equals the squared canonical correlation
+$\rho_i^2$. We then address estimation in the regime $p \gg n$ via regularized
+covariances, reduced-rank regression, and the probabilistic-CCA latent-variable
+form, and describe cross-validated and permutation-based procedures for honest
+inference. The companion notebook
+\texttt{notebooks/radiogenomic\_recoverability.ipynb} implements the full
+pipeline on a pair of \texttt{AnnData} objects, with a synthetic-data fallback
+that has known ground truth.
+\end{abstract}
+
+\section{Setup and notation}
+\label{sec:setup}
+
+We observe $n$ patients. For patient $i$ let $g_i \in \R^{p}$ be a vector of
+genomic features (e.g.\ expression, somatic mutation burden, copy-number scores)
+and $x_i \in \R^{d}$ a vector of imaging phenotypes (radiomic descriptors, deep
+features, or structured reads). Stack the observations into data matrices
+$\mathbf{G} \in \R^{n \times p}$ and $\mathbf{X} \in \R^{n \times d}$, with row
+$i$ equal to $g_i\T$ and $x_i\T$ respectively. Random variables are written in
+uppercase ($G, X$), realizations in lowercase ($g, x$). Throughout we assume
+both modalities have been centered, so all means are zero; recentring is handled
+by the estimators of Section~\ref{sec:estimation}.
+
+We use $\Sg \in \R^{p \times p}$, $\Sx \in \R^{d \times d}$ for the marginal
+covariances, $\Sgx = \Cov(G, X) \in \R^{p \times d}$ for the cross-covariance,
+and $\Sxg = \Sgx\T$. For a symmetric positive-definite $S$ we write $S^{1/2}$ for
+its symmetric square root and $S^{-1/2}$ for the inverse thereof.
+
+\section{The linear--Gaussian generative model}
+\label{sec:model}
+
+The genomic state is drawn from a Gaussian prior and the imaging phenotype is a
+noisy linear readout of it:
+\begin{align}
+G &\sim \N(0, \Sg), \label{eq:prior}\\
+X \mid G &\sim \N(A G,\ \sigma^2 I_d), \qquad A \in \R^{d \times p}. \label{eq:likelihood}
+\end{align}
+The matrix $A$ encodes how genomic variation is expressed in the image; the
+isotropic term $\sigma^2 I_d$ collects everything in the image that genomics does
+not drive --- biological variation outside the measured panel, acquisition and
+reconstruction noise, and feature-extraction error. Equivalently,
+\begin{equation}
+X = A G + \varepsilon, \qquad \varepsilon \sim \N(0, \sigma^2 I_d), \quad \varepsilon \perp G.
+\label{eq:structural}
+\end{equation}
+Equations~\eqref{eq:prior}--\eqref{eq:structural} are deliberately the simplest
+model with a non-trivial answer. Their value is that \emph{every} downstream
+quantity is closed-form, so the model functions as an exact upper bound: no
+estimator --- linear or nonlinear --- can recover genomics from imaging better
+than the posterior derived below. Section~\ref{sec:estimation} relaxes the
+isotropic-noise and known-parameter assumptions for practical fitting.
+
+\section{Marginal and joint laws}
+\label{sec:joint}
+
+\begin{proposition}[Joint Gaussian law]
+\label{prop:joint}
+Under \eqref{eq:prior}--\eqref{eq:structural},
+\begin{equation}
+\begin{pmatrix} G \\ X \end{pmatrix}
+\sim \N\!\left(0,\
+\begin{pmatrix}
+\Sg & \Sg A\T \\
+A \Sg & A \Sg A\T + \sigma^2 I_d
+\end{pmatrix}\right).
+\end{equation}
+In particular the imaging marginal is $X \sim \N(0, \Sx)$ with
+\begin{equation}
+\Sx = A \Sg A\T + \sigma^2 I_d,
+\label{eq:sigmax}
+\end{equation}
+and the cross-covariance is $\Sgx = \Sg A\T$.
+\end{proposition}
+
+\begin{proof}
+$G$ and $\varepsilon$ are jointly Gaussian and independent, and
+$(G, X)$ is a linear image of $(G, \varepsilon)$, hence jointly Gaussian. The
+blocks follow from $\Cov(G,X) = \Cov(G, AG + \varepsilon) = \Sg A\T$ and
+$\Var(X) = A \Sg A\T + \sigma^2 I_d$.
+\end{proof}
+
+Equation~\eqref{eq:sigmax} is the model's first interpretive statement: imaging
+covariance decomposes additively into a \emph{genomics-driven} component
+$A \Sg A\T$ and an \emph{irreducible} component $\sigma^2 I_d$. The cross-covariance
+$\Sgx = \Sg A\T$ is the central estimable object --- it names which genomic
+directions co-vary with imaging at all.
+
+\section{Bayes-optimal recovery of genomics from imaging}
+\label{sec:posterior}
+
+\begin{proposition}[Posterior]
+\label{prop:posterior}
+The posterior of genomics given imaging is Gaussian, $G \mid X \sim \N(\hat g(X), \Sgcx)$, with
+\begin{align}
+\hat g(X) &= \E[G \mid X] = \Sg A\T \big(A \Sg A\T + \sigma^2 I_d\big)^{-1} X \;=\; B X, \label{eq:postmean}\\
+\Sgcx &= \Sg - \Sg A\T \big(A \Sg A\T + \sigma^2 I_d\big)^{-1} A \Sg. \label{eq:postcov}
+\end{align}
+Equivalently, in precision form,
+\begin{equation}
+\Sgcx^{-1} = \Sg^{-1} + \sigma^{-2} A\T A,
+\qquad
+B = \sigma^{-2}\, \Sgcx\, A\T .
+\label{eq:precision}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Equations~\eqref{eq:postmean}--\eqref{eq:postcov} are the standard Gaussian
+conditioning formulas applied to Proposition~\ref{prop:joint}. The precision
+form follows from the Woodbury identity:
+$\big(\Sg^{-1} + \sigma^{-2} A\T A\big)^{-1} = \Sg - \Sg A\T(A\Sg A\T + \sigma^2 I_d)^{-1} A \Sg$,
+and then $B = \Sg A\T \Sx^{-1} = \sigma^{-2}\Sgcx A\T$ by the push-through
+identity $\Sg A\T(A\Sg A\T+\sigma^2 I)^{-1} = (\Sg^{-1}+\sigma^{-2}A\T A)^{-1}\sigma^{-2}A\T$.
+\end{proof}
+
+The estimator $\hat g(X) = BX$ is the Bayes-optimal predictor under squared-error
+loss; because the model is jointly Gaussian it is also the optimal predictor over
+\emph{all} measurable functions of $X$, not merely linear ones. Thus $\Sgcx$ is a
+hard floor on residual genomic uncertainty: \textbf{no algorithm can do better}.
+The precision form~\eqref{eq:precision} makes the accounting transparent ---
+imaging \emph{adds} information $\sigma^{-2} A\T A$ to the prior precision
+$\Sg^{-1}$.
+
+\section{Mutual information and the SNR decomposition}
+\label{sec:mi}
+
+\begin{proposition}[Mutual information]
+\label{prop:mi}
+The mutual information between the two modalities is
+\begin{equation}
+I(G; X)
+= \tfrac12 \log \frac{\det \Sg}{\det \Sgcx}
+= \tfrac12 \log \det\!\big(I_d + \sigma^{-2} A \Sg A\T\big).
+\label{eq:mi}
+\end{equation}
+Let $\lambda_1 \ge \cdots \ge \lambda_r > 0$ be the nonzero eigenvalues of
+$A \Sg A\T$. Then
+\begin{equation}
+I(G; X) = \tfrac12 \sum_{i=1}^{r} \log\!\left(1 + \frac{\lambda_i}{\sigma^2}\right).
+\label{eq:mi-diag}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+For jointly Gaussian $(G,X)$,
+$I(G;X) = \tfrac12 \log\big(\det\Sg / \det\Sgcx\big)$. Substituting
+\eqref{eq:precision}, $\det \Sgcx = \det\Sg \,/ \det(I_p + \sigma^{-2}\Sg^{1/2}A\T A \Sg^{1/2})$,
+and Sylvester's determinant identity moves $A$ to the other side to give
+$\det(I_d + \sigma^{-2} A\Sg A\T)$. Diagonalizing $A\Sg A\T$ yields
+\eqref{eq:mi-diag}.
+\end{proof}
+
+Equation~\eqref{eq:mi-diag} is the cleanest reading of the model: each
+image-visible genomic direction contributes
+$\tfrac12 \log(1 + \mathrm{SNR}_i)$ bits (nats), where
+$\mathrm{SNR}_i = \lambda_i / \sigma^2$ is the signal-to-noise ratio of that
+direction. Directions whose genomic signal is small relative to imaging noise
+contribute essentially nothing, regardless of how many genes load on them.
+
+\section{Canonical coordinates and the recoverability spectrum}
+\label{sec:canonical}
+
+The eigenvalues $\lambda_i$ are most interpretable after whitening. Define the
+whitened genomic variable $U = \Sg^{-1/2} G \sim \N(0, I_p)$ and the
+\emph{whitened transfer operator}
+\begin{equation}
+M := \sigma^{-1} A\, \Sg^{1/2} \in \R^{d \times p},
+\qquad
+M = \sum_{i} d_i\, u_i v_i\T \quad\text{(SVD)},
+\label{eq:M}
+\end{equation}
+with left/right singular vectors $u_i \in \R^d$, $v_i \in \R^p$ and singular
+values $d_1 \ge d_2 \ge \cdots \ge 0$.
+
+\begin{proposition}[Canonical decomposition of recoverability]
+\label{prop:canonical}
+With $M$ as in \eqref{eq:M}, define the genomic canonical direction
+$a_i := \Sg^{-1/2} v_i$ and the canonical score $S_i := a_i\T G = v_i\T U$. Then:
+\begin{enumerate}
+\item[(i)] $S_i$ has prior variance $1$ and posterior variance
+$\Var(S_i \mid X) = (1 + d_i^2)^{-1}$;
+\item[(ii)] the canonical correlation between $S_i$ and imaging is
+$\rho_i = d_i / \sqrt{1 + d_i^2}$, equivalently $d_i^2 = \rho_i^2/(1-\rho_i^2)$;
+\item[(iii)] the eigenvalues of Section~\ref{sec:mi} satisfy
+$\lambda_i / \sigma^2 = d_i^2$, so
+\begin{equation}
+I(G;X) = \tfrac12 \sum_i \log(1 + d_i^2) = -\tfrac12 \sum_i \log(1 - \rho_i^2).
+\end{equation}
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+In whitened coordinates the likelihood is $X \mid U \sim \N(\sigma M U, \sigma^2 I_d)$,
+since $A G = A \Sg^{1/2} U = \sigma M U$. The posterior precision of $U$ is
+$I_p + \sigma^{-2}(\sigma M)\T(\sigma M) = I_p + M\T M = V (I_p + D^2) V\T$,
+so $\Var(U \mid X) = V(I_p + D^2)^{-1} V\T$ and
+$\Var(S_i \mid X) = v_i\T \Var(U\mid X) v_i = (1+d_i^2)^{-1}$, giving (i).
+For (ii), $\Cov(U, X) = \E[U(\sigma M U + \varepsilon)\T] = \sigma M\T$, so
+$\Cov(S_i, X) = \sigma v_i\T M\T = \sigma d_i u_i\T$. The matched imaging variate
+$T_i := u_i\T X$ has $\Var(T_i) = u_i\T \Sx u_i = \sigma^2(1 + d_i^2)$ (using
+$\Sx = \sigma^2(MM\T + I_d)$) and $\Cov(S_i, T_i) = \sigma d_i$, hence
+$\rho_i = \mathrm{corr}(S_i, T_i) = d_i/\sqrt{1+d_i^2}$. Part (iii) is immediate
+from $A\Sg A\T = \sigma^2 M M\T$ and $\det(I_d + MM\T) = \prod_i(1+d_i^2)$.
+\end{proof}
+
+Part (i) gives the headline identity. Define the recoverability of a genomic
+score as one minus the fraction of its variance that survives observing imaging
+(formalized in Section~\ref{sec:scores}); then
+\begin{equation}
+\boxed{\;R(a_i) = 1 - \Var(S_i \mid X) = 1 - \frac{1}{1+d_i^2} = \frac{d_i^2}{1+d_i^2} = \rho_i^2.\;}
+\label{eq:R-rho}
+\end{equation}
+\textbf{The recoverability of the $i$-th canonical genomic direction is exactly
+the squared canonical correlation.} This is what reduces the whole analysis to
+CCA between $\mathbf{G}$ and $\mathbf{X}$ (Section~\ref{sec:estimation}), and it
+means $A$ and $\sigma^2$ never have to be estimated individually --- only the
+three second moments $\Sg, \Sx, \Sgx$ enter.
+
+\section{Recoverability of a named genomic direction}
+\label{sec:scores}
+
+In practice one often cares about a specific, biologically named genomic score
+$Y = v\T G$ for a fixed $v \in \R^p$ --- a pathway signature, a polygenic score,
+a single gene's expression ($v = e_j$).
+
+\begin{definition}[Recoverability score]
+For $v \in \R^p$ with $v\T \Sg v > 0$,
+\begin{equation}
+R(v) := 1 - \frac{v\T \Sgcx\, v}{v\T \Sg\, v}
+= \frac{v\T (\Sg - \Sgcx)\, v}{v\T \Sg\, v}
+\;\in\; [0, 1].
+\label{eq:Rv}
+\end{equation}
+\end{definition}
+
+$R(v) = 0$ means imaging carries no information about $Y = v\T G$;
+$R(v) = 1$ means imaging determines it exactly. The score is scale-invariant in
+$v$ and, by the Gaussian conditional-variance identity, equals the population
+$R^2$ of the Bayes-optimal predictor of $Y$ from $X$:
+$R(v) = 1 - \E[\Var(Y \mid X)] / \Var(Y)$. The matrix at the core of
+\eqref{eq:Rv} has the convenient moment-only form
+\begin{equation}
+\Sg - \Sgcx = \Sg A\T \Sx^{-1} A \Sg = \Sgx\, \Sx^{-1}\, \Sxg .
+\label{eq:explained}
+\end{equation}
+
+\section{The recoverability eigenproblem}
+\label{sec:eigenproblem}
+
+The natural project-level question --- \emph{which} genomic directions does
+imaging see best --- is the variational problem
+\begin{equation}
+\max_{v \neq 0}\;
+R(v)
+= \max_{v \neq 0}\;
+\frac{v\T \big(\Sgx \Sx^{-1} \Sxg\big) v}{v\T \Sg\, v}.
+\label{eq:varproblem}
+\end{equation}
+
+\begin{proposition}[Recoverability eigenproblem $=$ CCA]
+\label{prop:eig}
+The stationary points of \eqref{eq:varproblem} are the solutions of the
+generalized eigenproblem
+\begin{equation}
+\Sgx\, \Sx^{-1}\, \Sxg\; v = \mu\, \Sg\, v .
+\label{eq:gevp}
+\end{equation}
+Its eigenvalues are $\mu_i = \rho_i^2 = d_i^2/(1+d_i^2)$ and its eigenvectors are
+the canonical genomic directions $a_i$ of Proposition~\ref{prop:canonical},
+$\Sg$-orthonormal ($a_i\T \Sg a_j = \delta_{ij}$). Thus the ordered solutions of
+\eqref{eq:gevp} are precisely the canonical correlation directions between $G$
+and $X$, and $\max_v R(v) = \rho_1^2$.
+\end{proposition}
+
+\begin{proof}
+\eqref{eq:gevp} is the first-order condition of the Rayleigh quotient
+\eqref{eq:varproblem}. Substitute $v = \Sg^{-1/2} w$ and $\Sgx = \Sg A\T$; the
+generalized eigenproblem becomes the ordinary one
+$\Sg^{1/2} A\T \Sx^{-1} A \Sg^{1/2}\, w = \mu\, w$. Now $A \Sg^{1/2} = \sigma M$
+and $\Sx = \sigma^2(MM\T + I_d)$, so
+\begin{equation*}
+\Sg^{1/2} A\T \Sx^{-1} A \Sg^{1/2}
+= \sigma M\T \cdot \sigma^{-2}(MM\T + I_d)^{-1} \cdot \sigma M
+= M\T (MM\T + I_d)^{-1} M .
+\end{equation*}
+With the SVD $M = U D V\T$ this equals $V\, D^2 (D^2 + I)^{-1}\, V\T$, whose
+eigenvalues are $d_i^2/(1+d_i^2) = \rho_i^2$ with eigenvectors $v_i$. Hence
+$w = v_i$ and $v = \Sg^{-1/2} v_i = a_i$; the $\Sg$-orthonormality
+$a_i\T \Sg a_j = v_i\T v_j = \delta_{ij}$ is immediate.
+\end{proof}
+
+So the deliverable of the analysis is a \emph{recoverability spectrum}
+$\rho_1^2 \ge \rho_2^2 \ge \cdots$ together with the genomic directions $a_i$
+that achieve it. Reading the loadings of $a_1, a_2, \dots$ back onto genes or
+pathways answers ``which biology is image-identifiable'': the leading directions
+typically align with coarse, spatially expressed programs --- proliferation,
+hypoxia, angiogenesis, necrosis, immune infiltration, tumor burden, stromal
+remodeling --- rather than with individual transcripts.
+
+\section{Rank limits and identifiability}
+\label{sec:rank}
+
+\begin{proposition}[Rank limit]
+\label{prop:rank}
+The recoverable signal matrix has rank
+\begin{equation}
+\rank(\Sg - \Sgcx) = \rank(A \Sg A\T)
+\le \min\!\big(d,\ p,\ \rank A,\ \rank \Sg\big).
+\end{equation}
+Consequently at most $\min(d, p, \rank A, \rank\Sg)$ canonical correlations are
+nonzero, and the image-identifiable genomic subspace
+$\operatorname{span}\{a_i : \rho_i > 0\}$ has dimension bounded by the same
+quantity.
+\end{proposition}
+
+This is the conceptual core. Even with $p = 20{,}000$ measured genes, imaging can
+expose only a projection of genomics whose dimension is capped by the rank of the
+transfer map $A$ --- if a CT phenotype reflects, say, $20$ macroscopic
+biological axes, then no model recovers $20{,}000$ independent molecular
+variables from it. The recoverable dimension is a property of the
+\emph{biology--imaging channel}, not of the estimator. A data-processing remark:
+imaging features are themselves a deterministic, lossy function
+$x = \phi(\text{image})$; any such post-processing can only shrink
+$\rank(\Sgx)$ and lower each $\rho_i$, never raise them.
+
+\section{Estimation from finite samples}
+\label{sec:estimation}
+
+In applications $p$ and $d$ may rival or exceed $n$, the noise is not isotropic,
+and $A, \Sg, \sigma^2$ are unknown. Because Propositions~\ref{prop:canonical}
+and~\ref{prop:eig} require only $\Sg, \Sx, \Sgx$, we estimate those directly.
+
+\subsection{Regularized covariances}
+\label{sec:estimation-cov}
+Replace sample covariances by shrinkage estimators (e.g.\ Ledoit--Wolf),
+$\hat\Sg = (1-\alpha_G)\,S_G + \alpha_G\, \nu_G I_p$ and likewise $\hat\Sx$, with
+$S_G = n^{-1}\mathbf{G}\T\mathbf{G}$ the centered sample covariance; the
+cross-covariance is $\hat\Sgx = n^{-1}\mathbf{G}\T\mathbf{X}$. Shrinkage keeps
+$\hat\Sg, \hat\Sx$ invertible and well-conditioned, which is required for the
+whitening in \eqref{eq:M}. When $p$ is very large it is practical to first
+project genomics onto its top principal components (or onto curated pathway
+scores), reducing $p$ to a manageable $p' \ll n$ before estimation; the rank
+limit of Proposition~\ref{prop:rank} means little is lost provided $p'$ exceeds
+the recoverable dimension.
+
+\subsection{Reduced-rank and ridge regression}
+\label{sec:estimation-rrr}
+The transfer map, if needed explicitly, is the multivariate regression of $X$ on
+$G$. Ridge gives
+$\hat A\T = (\mathbf{G}\T\mathbf{G} + \gamma I_p)^{-1}\mathbf{G}\T\mathbf{X}$,
+and $\hat\sigma^2$ follows from the residual covariance. Imposing
+$\rank(A) \le k$ (reduced-rank regression) bakes Proposition~\ref{prop:rank}
+into the fit and is equivalent, up to regularization, to truncating the SVD of
+$M$ at $k$ components.
+
+\subsection{Regularized CCA}
+\label{sec:estimation-cca}
+The estimator used in the companion notebook solves \eqref{eq:gevp} with the
+regularized covariances of Section~\ref{sec:estimation-cov}: form
+$\hat M = \hat\Sg^{-1/2} \hat\Sgx \hat\Sx^{-1/2}$, take its SVD
+$\hat M = \hat U \hat D \hat V\T$, and read off
+$\hat\rho_i = \hat d_i$ (clipped to $[0,1)$),
+$\hat R_i = \hat\rho_i^2$, genomic directions $\hat a_i = \hat\Sg^{-1/2}\hat u_i$,
+imaging directions $\hat b_i = \hat\Sx^{-1/2}\hat v_i$. The Bayes-optimal
+predictor and posterior covariance follow from
+\eqref{eq:postmean}--\eqref{eq:postcov} with hats throughout. This is exactly
+regularized CCA --- the recoverability program and CCA are the same computation.
+
+\subsection{Probabilistic CCA: the latent-variable view}
+\label{sec:estimation-pcca}
+The rank limit motivates an explicit low-dimensional generative form. With a
+shared latent $Z \in \R^{k}$,
+\begin{equation}
+Z \sim \N(0, I_k), \qquad
+G = W_G Z + \mu_G + \epsilon_G, \qquad
+X = W_X Z + \mu_X + \epsilon_X,
+\label{eq:pcca}
+\end{equation}
+$\epsilon_G \sim \N(0, \Psi_G)$, $\epsilon_X \sim \N(0, \Psi_X)$ independent
+(probabilistic CCA; Bach \& Jordan, 2005). Here $k$ \emph{is} the dimension of
+the image-identifiable genomic subspace, $Z$ is the shared biological state, and
+$\epsilon_G, \epsilon_X$ are modality-private variation. The implied moments are
+$\Sg = W_G W_G\T + \Psi_G$, $\Sx = W_X W_X\T + \Psi_X$,
+$\Sgx = W_G W_X\T$; the maximum-likelihood loadings are the canonical directions
+scaled by the canonical correlations, recovering Section~\ref{sec:estimation-cca}.
+The model is fit by EM, which also yields posterior latent estimates
+$\E[Z \mid x]$ and naturally accommodates anisotropic (per-feature) noise, unlike
+the isotropic $\sigma^2 I_d$ of the base model.
+
+\subsection{Honest recoverability: cross-validation and permutation}
+\label{sec:estimation-honest}
+In-sample canonical correlations are biased upward, severely so when $p, d$ are
+not small relative to $n$. Two safeguards, both implemented in the notebook:
+\begin{itemize}
+\item \emph{Cross-validation.} Estimate $\hat a_i, \hat b_i$ on a training fold;
+on the held-out fold form the scores $\hat a_i\T g$ and $\hat b_i\T x$ and report
+their out-of-sample squared correlation as the honest $\hat R_i$. The gap to the
+in-sample value quantifies overfitting.
+\item \emph{Permutation test.} Repeatedly permute the patient labels of one
+modality, refit, and collect the leading canonical correlation to build a null
+distribution; the permutation $p$-value tests whether any genomic direction is
+image-identifiable beyond chance.
+\end{itemize}
+
+\section{Interpretation for radiogenomics}
+\label{sec:interpretation}
+
+The model reframes the radiogenomic question. Rather than testing whether CT
+predicts each gene --- a high-dimensional, low-power multiple-testing problem ---
+it asks for the \emph{recoverability spectrum} $\{\rho_i^2\}$ and the associated
+genomic directions $\{a_i\}$. The outputs are: (1) a small number of
+image-identifiable genomic axes, with gene/pathway loadings that make them
+biologically legible; (2) a hard bound $\Sgcx$ on what any predictor can achieve,
+per direction; (3) a total information budget $I(G;X)$; and (4) an honest,
+cross-validated estimate of each. The governing principle is that radiogenomics
+should target \emph{image-identifiable low-dimensional genomic subspaces}, whose
+dimension is set by the biology--imaging channel and not by the gene panel size.
+
+\appendix
+\section{Symbol reference}
+\label{app:symbols}
+
+\noindent
+\begin{tabular}{ll}
+$g \in \R^p,\ x \in \R^d$ & per-patient genomic / imaging feature vectors\\
+$\mathbf{G} \in \R^{n\times p},\ \mathbf{X} \in \R^{n\times d}$ & stacked data matrices ($n$ patients)\\
+$A \in \R^{d\times p}$ & genomics-to-imaging transfer map\\
+$\sigma^2$ & isotropic imaging noise variance\\
+$\Sg, \Sx, \Sgx$ & genomic / imaging / cross covariance\\
+$\Sgcx$ & posterior covariance of $G$ given $X$ (recoverability floor)\\
+$B = \Sgx \Sx^{-1}$ & Bayes-optimal linear map $x \mapsto \E[g\mid x]$\\
+$M = \sigma^{-1} A \Sg^{1/2}$ & whitened transfer operator; $d_i$ its singular values\\
+$\rho_i,\ R_i = \rho_i^2$ & $i$-th canonical correlation / recoverability\\
+$a_i,\ b_i$ & $i$-th canonical genomic / imaging direction\\
+$R(v)$ & recoverability score of a named genomic direction $v$\\
+$I(G;X)$ & mutual information between modalities\\
+$k$ & dimension of the image-identifiable genomic subspace\\
+\end{tabular}
+
+\end{document}

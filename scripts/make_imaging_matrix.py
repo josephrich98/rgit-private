@@ -54,7 +54,7 @@ def _load_radimagenet_model(model_type: str, model_path: str | None, device: str
             model.load_state_dict(state, strict=False)
             logger.info(f"Loaded RadImageNet weights from {model_path}")
         else:
-            logger.warning("No --model_path given; RadImageNet backbone is randomly initialised.")
+            raise ValueError("Model path must be provided for RadImageNet embedder. You can find it at https://drive.google.com/file/d/1RHt2GnuOYlc_gcoTETtBDSW73mFyRAtR/view?usp=sharing. gdown 'https://drive.google.com/uc?id=1RHt2GnuOYlc_gcoTETtBDSW73mFyRAtR' -O RadImageNet_pytorch.zip.")
         model.to(device).eval()
         _MODEL_CACHE[key] = model
     return _MODEL_CACHE[key]
@@ -108,7 +108,7 @@ def parse_args():
     parser.add_argument("-e", "--embedder", choices=["pyradiomics", "radimagenet"], default="pyradiomics", help="Embedding method to use")
     parser.add_argument("--pyradiomics_params", default=None, help="[pyradiomics] Path to YAML params file for RadiomicsFeatureExtractor")
     parser.add_argument("--model_path", default=None, help="[radimagenet] Path to pretrained model checkpoint (.pth)")
-    parser.add_argument("--model_type", default="densenet121", choices=["densenet121", "resnet50", "inceptionv3"], help="[radimagenet] Backbone architecture")
+    parser.add_argument("--model_type", default="resnet50", choices=["resnet50", "densenet121", "inceptionv3"], help="[radimagenet] Backbone architecture")
     parser.add_argument("--device", default="cpu", help="[radimagenet] Torch device (cpu, cuda, mps)")
     parser.add_argument("--extra_meta_cols", nargs="*", default=[], help="Additional metadata columns from the metadata file to store in adata.obs")
     parser.add_argument("--mask_col", default=None, help="Column name in metadata containing mask paths")

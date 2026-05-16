@@ -609,6 +609,92 @@ The model is fit by EM, which also yields posterior latent estimates
 $\E[Z \mid x]$ and naturally accommodates anisotropic (per-feature) noise, unlike
 the isotropic $\sigma^2 I_d$ of the base model.
 
+\subsection{Sample-size regimes and dimensional collapse}
+\label{sec:estimation-regimes}
+Equations~\eqref{eq:postmean}--\eqref{eq:gevp} are population identities; the
+estimators of Sections~\ref{sec:estimation-cov}--\ref{sec:estimation-pcca}
+inherit a finite-sample bias whose magnitude is governed entirely by the
+aspect ratios $p/n$ and $d/n$. The bias is not benign, and below a critical
+sample size the recoverability spectrum breaks down in a specific, predictable
+way.
+
+\paragraph{Three regimes.} Let $p^\star, d^\star$ be the working dimensions
+after any pre-reduction (e.g.\ PCA), and write $\kappa_G = p^\star/n$,
+$\kappa_X = d^\star/n$.
+\begin{enumerate}
+\item \emph{Classical} ($\kappa_G + \kappa_X \ll 1$). Sample CCA is consistent;
+$\hat\rho_i \to \rho_i$ at the usual $n^{-1/2}$ rate and the in-sample spectrum
+is a faithful estimate of the population one.
+\item \emph{High-dimensional} ($\kappa_G + \kappa_X \lesssim 1$, both bounded
+away from $1$). Under the null $\Sgx = 0$, the squared sample canonical
+correlations follow a Wachter-type law on
+$[(\sqrt{\kappa_G(1-\kappa_X)} - \sqrt{\kappa_X(1-\kappa_G)})^2,
+ (\sqrt{\kappa_G(1-\kappa_X)} + \sqrt{\kappa_X(1-\kappa_G)})^2]$
+(Wachter, 1980; Yang \& Pan, 2015); the leading sample value already sits well
+above zero by geometry. Estimates of $\rho_i$ are systematically inflated and
+ordinary CCA must be replaced by its regularized form, with shrinkage
+parameters tuned by cross-validation.
+\item \emph{Saturating} ($p^\star + d^\star \ge n$). The rows of $\mathbf{G}$
+and $\mathbf{X}$ live in subspaces whose intersection has dimension at least
+$p^\star + d^\star - n + 1$; consequently
+$\hat\rho_1 = \cdots = \hat\rho_q = 1$ for $q = \min(p^\star, d^\star) - (n -
+\max(p^\star, d^\star))_+$ \emph{regardless of any underlying association}.
+The empirical mutual information diverges, the in-sample
+$\tr(\hat\Sgx \hat\Sx^{-1} \hat\Sxg)/\tr(\hat\Sx)$ approaches the rank fraction
+of the genomic span, and the permutation null collapses onto the observed
+value (its $p$-values concentrate near $1$). Nothing in the spectrum is
+estimable in this regime without shrinkage \emph{plus} dimension reduction;
+shrinkage alone keeps the matrices invertible but does not restore
+identifiability.
+\end{enumerate}
+
+\paragraph{Quantitative warning signs.} Three diagnostics, jointly, separate
+real signal from dimensional artefact:
+\begin{itemize}
+\item the gap between in-sample $\hat R_i$ and the $K$-fold value $\hat
+R_i^{\mathrm{cv}}$; under regime~3 this gap approaches $\hat R_i - 0$;
+\item the permutation null for $\hat\rho_1$: if the observed value lies inside
+the bulk, the result is consistent with chance;
+\item the cross-validated $R^2$ of the leading canonical score $a_1\T g$
+predicted from $x$ on a held-out split; in regime~3 it is typically large and
+\emph{negative} (worse than predicting the mean), a behaviour seen empirically
+on TCGA-KIRC at $n=131$ with $p^\star = 100, d^\star = 107$ in the companion
+notebook.
+\end{itemize}
+
+\paragraph{Recommendations.} Choose $p^\star$ and $d^\star$ \emph{adaptively
+from $n$}, not from the native modality dimensions:
+\begin{itemize}
+\item Target $p^\star + d^\star \le n/\tau$ with $\tau \ge 5$ as a working
+rule (we use $p^\star, d^\star \le \lfloor n/\tau \rfloor$ per side in the
+notebook; $\tau \in [5,10]$ trades bias for resolution). Reduce both
+modalities by PCA when needed --- reducing only the larger side leaves the
+estimator in regime~3.
+\item Treat $\hat R_i^{\mathrm{cv}}$ (Section~\ref{sec:estimation-honest}) as
+the primary estimand and report the in-sample $\hat R_i$ only with the gap
+made explicit; the in-sample fraction of imaging variance attributable to
+genomics should be reported alongside a cross-validated counterpart, e.g.\
+$\sum_i \hat R_i^{\mathrm{cv}}/\min(p^\star, d^\star)$.
+\item Power planning. The leading population correlation $\rho_1$ is detectable
+above the Wachter bulk only when its squared value exceeds
+$(\sqrt{\kappa_G(1-\kappa_X)} + \sqrt{\kappa_X(1-\kappa_G)})^2$; solving for $n$
+gives a minimum sample size given a hypothesised effect. For
+$\rho_1^2 = 0.2$ and a balanced $p^\star = d^\star$, this requires roughly
+$n \gtrsim 25\,p^\star$, an order of magnitude beyond what cohort sizes in
+radiogenomics usually offer --- reinforcing the need for aggressive
+pre-reduction.
+\item Probabilistic CCA (Section~\ref{sec:estimation-pcca}) with a small,
+fixed latent dimension $k$ is the most parsimonious option when $n$ is the
+binding constraint; rank-$k$ regularization sidesteps the high-dimensional
+bulk by construction.
+\end{itemize}
+
+The practical message is conservative: in radiogenomic cohorts, sample size
+is almost always the binding constraint and a defensible analysis is the one
+whose effective $p^\star + d^\star$ is a small fraction of $n$, with both
+sides reduced symmetrically and every reported number a cross-validated or
+permutation-calibrated one.
+
 \subsection{Honest recoverability: cross-validation and permutation}
 \label{sec:estimation-honest}
 In-sample canonical correlations are biased upward, severely so when $p, d$ are

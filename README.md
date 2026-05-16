@@ -50,8 +50,11 @@ Python 3.10+ is recommended. Dependencies are declared in `pyproject.toml`.
 
 Analysis notebooks are in `notebooks/`. Reusable estimation utilities live in the `rgit/` package. Batch scripts for large-scale runs are in `scripts/`.
 
-papermill notebooks/radiogenomic_recoverability.ipynb notebooks/radiogenomic_recoverability_output_synthetic.ipynb  # synthetic data
+### Synthetic data
+papermill notebooks/radiogenomic_recoverability.ipynb notebooks/out/radiogenomic_recoverability_output_synthetic.ipynb  # synthetic data
 
+### Real data (TCGA-KIRC example)
+#### Imaging data processing
 python scripts/process_imaging.py -d data/tcga_kirc/imaging
 python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/whole_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --embedder pyradiomics
 python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/organ_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --mask_col organ_mask --embedder pyradiomics
@@ -60,15 +63,20 @@ python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/whole_radimagene
 python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/organ_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --mask_col organ_mask --embedder radimagenet --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 185,185,75
 python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/tumor_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --mask_col tumor_mask --embedder radimagenet --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 185,185,75 --label 2
 
+#### Genomics data processing
 wget -O data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz https://api.gdc.cancer.gov/data/1c8cfe5f-e52d-41ba-94da-f15ea1337efc
 python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_genes.h5ad data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz --feature gene_symbol --patient_ids data/tcga_kirc/imaging/metadata.csv
 python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_pathways.h5ad data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz --feature pathway --patient_ids data/tcga_kirc/imaging/metadata.csv
 
+gdc-client download -m data/tcga_kirc/genomics/gene_expression_manifest.txt -d data/tcga_kirc/genomics
+tar -xzvf data/tcga_kirc/genomics/gene_expression.tar.gz -C data/tcga_kirc/genomics/gene_expression
+python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/gene_expression.h5ad data/tcga_kirc/genomics/gene_expression --feature gene_expression --patient_ids data/tcga_kirc/imaging/metadata.csv --filename_to_patientid data/tcga_kirc/genomics/gene_expression/gene_expression_filename_to_patientid.csv --gene_expression_bins 2
 
+#### Run notebooks
 for genomics_h5ad in data/tcga_kirc/genomics/*.h5ad; do
     for imaging_h5ad in data/tcga_kirc/imaging/*_radimagenet.h5ad; do
         echo "Running recoverability analysis for genomics: $genomics_h5ad and imaging: $imaging_h5ad"
-        output_notebook="notebooks/radiogenomic_recoverability_output_genomics_$(basename ${genomics_h5ad%.*})_imaging_$(basename ${imaging_h5ad%.*}).ipynb"
+        output_notebook="notebooks/out/radiogenomic_recoverability_output_tcga_kirc_genomics_$(basename ${genomics_h5ad%.*})_imaging_$(basename ${imaging_h5ad%.*}).ipynb"
         papermill notebooks/radiogenomic_recoverability.ipynb "$output_notebook" -p GENOMICS_H5AD "$genomics_h5ad" -p IMAGING_H5AD "$imaging_h5ad"
     done
 done

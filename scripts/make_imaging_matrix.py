@@ -2,7 +2,6 @@
 Build a patient × imaging-feature AnnData from a directory of series.
 
 Metadata CSV/parquet must have columns:
-  series_id  — name of the subdirectory containing that series' images
   patient_id — obs index in the output AnnData
 
 Embedders:
@@ -12,213 +11,86 @@ Embedders:
 
 import argparse
 import logging
+import subprocess
 import os
 import warnings
 from pathlib import Path
 
 import anndata as ad
 import numpy as np
+from tqdm import tqdm
 import pandas as pd
 from scipy.sparse import csr_matrix
-from tqdm import tqdm
+import SimpleITK as sitk
+from tcia_radiology_processing import utils
+import torch
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# File discovery helpers
-# ---------------------------------------------------------------------------
-
-_DICOM_EXTS = {".dcm", ".ima", ".dicom"}
-_NIFTI_EXTS = {".nii", ".gz"}  # .nii.gz handled separately
-
-
-def _find_series_dir(root: Path, series_id: str) -> Path | None:
-    """Return the first directory under root whose name matches series_id."""
-    for dirpath, dirnames, _ in os.walk(root):
-        for d in dirnames:
-            if d == series_id:
-                return Path(dirpath) / d
-    return None
-
-
-def _collect_files(directory: Path, extensions: set[str]) -> list[Path]:
-    files = []
-    for p in sorted(directory.rglob("*")):
-        if p.is_file() and p.suffix.lower() in extensions:
-            files.append(p)
-        elif p.is_file() and p.name.lower().endswith(".nii.gz"):
-            files.append(p)
-    return files
-
-
-# ---------------------------------------------------------------------------
-# Pyradiomics embedder
-# ---------------------------------------------------------------------------
-
-def _embed_pyradiomics(series_dir: Path, mask_dir: Path | None, params: dict | None) -> dict[str, float] | None:
-    try:
-        import SimpleITK as sitk
-        from radiomics import featureextractor
-    except ImportError:
-        raise ImportError("pyradiomics and SimpleITK are required: pip install pyradiomics SimpleITK")
-
-    extractor = featureextractor.RadiomicsFeatureExtractor(**(params or {}))
-
-    # --- load image ---
-    niftis = [p for p in series_dir.rglob("*") if p.suffix in {".nii"} or str(p).endswith(".nii.gz")]
-    dicoms = [p for p in series_dir.rglob("*") if p.suffix.lower() in _DICOM_EXTS]
-
-    if niftis:
-        image_path = str(niftis[0])
-        image = sitk.ReadImage(image_path)
-    elif dicoms:
-        reader = sitk.ImageSeriesReader()
-        series_ids = reader.GetGDCMSeriesIDs(str(series_dir))
-        if not series_ids:
-            logger.warning(f"No DICOM series found in {series_dir}")
-            return None
-        dicom_files = reader.GetGDCMSeriesFileNames(str(series_dir), series_ids[0])
-        reader.SetFileNames(dicom_files)
-        image = reader.Execute()
-        image_path = None
-    else:
-        logger.warning(f"No images found in {series_dir}")
-        return None
-
-    # --- load or create mask ---
-    mask = None
-    if mask_dir is not None:
-        mask_candidates = list(Path(mask_dir).rglob(f"{series_dir.name}*"))
-        if mask_candidates:
-            mask = sitk.ReadImage(str(mask_candidates[0]))
-
-    if mask is None:
-        # whole-volume binary mask
-        mask = sitk.Cast(sitk.BinaryFillhole(image > sitk.GetArrayFromImage(image).min()), sitk.sitkUInt8)
-        mask = sitk.GetImageFromArray(
-            np.ones(sitk.GetArrayFromImage(image).shape, dtype=np.uint8)
-        )
-        mask.CopyInformation(image)
-
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            result = extractor.execute(image, mask)
-        features = {k: float(v) for k, v in result.items() if not k.startswith("diagnostics_")}
-        return features
-    except Exception as e:
-        logger.warning(f"pyradiomics failed for {series_dir}: {e}")
-        return None
-
+from rgit import logger
+from rgit.radimagenet import (
+    RadImageNetEmbedding,
+    convert_image_to_radimagenet_format,
+    get_radimagenet_embeddings,
+)
 
 # ---------------------------------------------------------------------------
 # RadImageNet embedder
 # ---------------------------------------------------------------------------
 
-def _embed_radimagenet(series_dir: Path, model_path: str | None, device: str = "cpu") -> dict[str, float] | None:
+# Module-level cache so the model is loaded once per (type, path, device) triple.
+_MODEL_CACHE: dict[tuple[str, str, str], RadImageNetEmbedding] = {}
+
+
+def _load_radimagenet_model(model_type: str, model_path: str | None, device: str) -> RadImageNetEmbedding:
+    key = (model_type, str(model_path), device)
+    if key not in _MODEL_CACHE:
+        model = RadImageNetEmbedding(model_type)
+        if model_path is not None:
+            state = torch.load(model_path, map_location=device)
+            # Support bare state-dicts and common checkpoint wrappers
+            if isinstance(state, dict):
+                state = state.get("state_dict", state.get("model", state))
+            model.load_state_dict(state, strict=False)
+            logger.info(f"Loaded RadImageNet weights from {model_path}")
+        else:
+            logger.warning("No --model_path given; RadImageNet backbone is randomly initialised.")
+        model.to(device).eval()
+        _MODEL_CACHE[key] = model
+    return _MODEL_CACHE[key]
+
+
+def _embed_radimagenet(
+    image_file: Path,
+    model_path: str | None,
+    device: str = "cpu",
+    model_type: str = "densenet121",
+) -> dict[str, float] | None:
+    """Embed a medical image with a RadImageNet backbone.
+
+    Reads the image via SimpleITK, preprocesses it with
+    :func:`convert_image_to_radimagenet_format`, and returns a flat dict of
+    ``radimagenet_0 … radimagenet_{embed_dim-1}`` float values.  3-D volumes
+    are embedded slice-by-slice and then mean-pooled across slices.
+    """
     try:
-        import torch
-        import torchvision.transforms as T
-        from PIL import Image
-    except ImportError:
-        raise ImportError("torch and torchvision are required: pip install torch torchvision Pillow")
+        sitk_img = sitk.ReadImage(str(image_file))
+        arr = sitk.GetArrayFromImage(sitk_img).astype(np.float32)  # (D,H,W) or (H,W)
+    except Exception as exc:
+        logger.warning(f"Could not read {image_file}: {exc}")
+        return None
 
-    try:
-        import timm
-        _has_timm = True
-    except ImportError:
-        _has_timm = False
+    t = convert_image_to_radimagenet_format(arr)  # (3,H,W) or (D,3,H,W)
+    model = _load_radimagenet_model(model_type, model_path, device)
 
-    device = torch.device(device)
-
-    # --- build model ---
-    if model_path and os.path.exists(model_path):
-        # Load arbitrary checkpoint: assume state_dict keys match a resnet50 backbone
-        import torchvision.models as tvm
-        backbone = tvm.resnet50(weights=None)
-        backbone.fc = torch.nn.Identity()
-        state = torch.load(model_path, map_location=device)
-        # handle wrapped state dicts
-        state = state.get("state_dict", state.get("model", state))
-        state = {k.replace("module.", "").replace("backbone.", ""): v for k, v in state.items()}
-        missing, unexpected = backbone.load_state_dict(state, strict=False)
-        if missing:
-            logger.debug(f"Missing keys when loading model: {missing[:5]}")
-        model = backbone
-    elif _has_timm:
-        logger.info("No model_path provided; loading timm resnet50 with ImageNet weights as proxy.")
-        model = timm.create_model("resnet50", pretrained=True, num_classes=0)
+    if t.ndim == 3:
+        # 2-D image: single frame
+        emb = get_radimagenet_embeddings(t.unsqueeze(0).to(device), model)  # (1,E)
+        vec = emb.squeeze(0).cpu().numpy()
     else:
-        import torchvision.models as tvm
-        logger.info("No model_path provided; using torchvision ResNet50 (ImageNet) as proxy.")
-        backbone = tvm.resnet50(weights=tvm.ResNet50_Weights.DEFAULT)
-        backbone.fc = torch.nn.Identity()
-        model = backbone
+        # 3-D volume: embed all slices, mean-pool
+        emb = get_radimagenet_embeddings(t.to(device), model)  # (D,E)
+        vec = emb.mean(dim=0).cpu().numpy()
 
-    model = model.to(device).eval()
-
-    transform = T.Compose([
-        T.Resize((224, 224)),
-        T.Grayscale(num_output_channels=3),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-
-    # --- collect image files (DICOM or common formats) ---
-    img_files = sorted(
-        p for p in series_dir.rglob("*")
-        if p.is_file() and p.suffix.lower() in {".dcm", ".png", ".jpg", ".jpeg", ".tif", ".tiff"}
-        or str(p).endswith(".nii.gz")
-        or p.suffix in {".nii"}
-    )
-
-    if not img_files:
-        logger.warning(f"No image files found in {series_dir}")
-        return None
-
-    embeddings = []
-    for img_path in img_files:
-        try:
-            if img_path.suffix.lower() == ".dcm":
-                import SimpleITK as sitk
-                arr = sitk.GetArrayFromImage(sitk.ReadImage(str(img_path))).astype(np.float32)
-                # normalize to 0-255 per slice
-                for sl in range(arr.shape[0]) if arr.ndim == 3 else [0]:
-                    slc = arr[sl] if arr.ndim == 3 else arr
-                    slc = (slc - slc.min()) / (slc.max() - slc.min() + 1e-8) * 255
-                    pil = Image.fromarray(slc.astype(np.uint8))
-                    tensor = transform(pil).unsqueeze(0).to(device)
-                    with torch.no_grad():
-                        emb = model(tensor).squeeze().cpu().numpy()
-                    embeddings.append(emb)
-            elif img_path.suffix in {".nii"} or str(img_path).endswith(".nii.gz"):
-                import SimpleITK as sitk
-                arr = sitk.GetArrayFromImage(sitk.ReadImage(str(img_path))).astype(np.float32)
-                slices = arr if arr.ndim == 3 else arr[None]
-                for sl in slices:
-                    sl = (sl - sl.min()) / (sl.max() - sl.min() + 1e-8) * 255
-                    pil = Image.fromarray(sl.astype(np.uint8))
-                    tensor = transform(pil).unsqueeze(0).to(device)
-                    with torch.no_grad():
-                        emb = model(tensor).squeeze().cpu().numpy()
-                    embeddings.append(emb)
-            else:
-                pil = Image.open(img_path).convert("L")
-                tensor = transform(pil).unsqueeze(0).to(device)
-                with torch.no_grad():
-                    emb = model(tensor).squeeze().cpu().numpy()
-                embeddings.append(emb)
-        except Exception as e:
-            logger.warning(f"Failed to embed {img_path}: {e}")
-            continue
-
-    if not embeddings:
-        return None
-
-    mean_emb = np.mean(embeddings, axis=0)
-    return {f"feat_{i}": float(v) for i, v in enumerate(mean_emb)}
+    return {f"radimagenet_{i}": float(v) for i, v in enumerate(vec)}
 
 
 # ---------------------------------------------------------------------------
@@ -227,26 +99,27 @@ def _embed_radimagenet(series_dir: Path, model_path: str | None, device: str = "
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Build patient × imaging-feature AnnData")
-    parser.add_argument("--dir", required=True, help="Root directory containing series subdirectories")
-    parser.add_argument("--metadata", required=True, help="CSV/parquet with columns 'series_id' and 'patient_id'")
-    parser.add_argument("--out", required=True, help="Output .h5ad path")
-    parser.add_argument(
-        "--embedder", choices=["pyradiomics", "radimagenet"], default="pyradiomics",
-        help="Embedding method to use"
-    )
-    parser.add_argument("--mask_dir", default=None, help="[pyradiomics] Directory containing mask files (matched by series_id prefix)")
+    parser.add_argument("-m", "--metadata", required=True, help="CSV/parquet with columns 'patient_id' and <image_col>")
+    parser.add_argument("-i", "--image_col", default="image", help="Column name in metadata containing image paths")
+    parser.add_argument("-o", "--out", default="imaging.h5ad", help="Output .h5ad path")
+    parser.add_argument("-e", "--embedder", choices=["pyradiomics", "radimagenet"], default="pyradiomics", help="Embedding method to use")
     parser.add_argument("--pyradiomics_params", default=None, help="[pyradiomics] Path to YAML params file for RadiomicsFeatureExtractor")
     parser.add_argument("--model_path", default=None, help="[radimagenet] Path to pretrained model checkpoint (.pth)")
+    parser.add_argument("--model_type", default="densenet121", choices=["densenet121", "resnet50", "inceptionv3"], help="[radimagenet] Backbone architecture")
     parser.add_argument("--device", default="cpu", help="[radimagenet] Torch device (cpu, cuda, mps)")
     parser.add_argument("--extra_meta_cols", nargs="*", default=[], help="Additional metadata columns from the metadata file to store in adata.obs")
+    parser.add_argument("--mask_col", default=None, help="Column name in metadata containing mask paths")
+    parser.add_argument("--clip_min", type=float, default=None, help="Minimum intensity value to clip to (pyradiomics)")
+    parser.add_argument("--clip_max", type=float, default=None, help="Maximum intensity value to clip to (pyradiomics)")
+    parser.add_argument("--resample_spacing", type=str, default=None, help="Target spacing for resampling (mm), e.g. '1.0,1.0,1.0'")
+    parser.add_argument("--apply_mask", action="store_true", help="Whether to apply the mask to the image before feature extraction")
+    parser.add_argument("--crop_size", type=str, default=None, help="Target size for cropping/padding (voxels), e.g. '128,128,64'")
+    parser.add_argument("--normalize", action="store_true", help="Whether to z-score normalize features across the dataset")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    root = Path(args.dir)
-    if not root.is_dir():
-        raise ValueError(f"--dir does not exist or is not a directory: {root}")
 
     # --- load metadata ---
     meta_path = Path(args.metadata)
@@ -255,41 +128,69 @@ def main():
     else:
         meta = pd.read_csv(meta_path)
 
-    required = {"series_id", "patient_id"}
+    required = {"patient_id", args.image_col}
     if not required.issubset(meta.columns):
         raise ValueError(f"Metadata must have columns {required}; found {set(meta.columns)}")
 
-    meta = meta.drop_duplicates(subset=["series_id"])
-    logger.info(f"Metadata: {len(meta)} series from {meta['patient_id'].nunique()} patients")
+    meta = meta.drop_duplicates(subset=["patient_id"])
+    logger.info(f"Metadata: {len(meta)} series")
+    
+    if args.embedder == "pyradiomics":
+        from radiomics import featureextractor
+        args.clip_min, args.clip_max, args.resample_spacing, args.apply_mask, args.crop_size, args.normalize = None, None, None, None, None, None
+        extractor = featureextractor.RadiomicsFeatureExtractor(args.pyradiomics_params)
+        label = 1 if mask_file else None
 
-    # pyradiomics params
-    pyrad_params = None
-    if args.pyradiomics_params:
-        pyrad_params = {"params": args.pyradiomics_params}
+        # utils.prepare_csv_for_pyradiomics(nifti_dir, output_csv_path=pyradiomics_input_csv_path, imaging_file_name=image_filename, mask_file_name=mask_filename)  # image_filename_nii, mask_filename_nii
+        # pyradiomics_command = "pyradiomics <path/to/csv> -j 32"
+        # if args.pyradiomics_params:
+        #     pyradiomics_command += f" --param {args.pyradiomics_params}"
+        # subprocess.run(pyradiomics_command, shell=True, check=True)
 
     # --- embed each series ---
     records = []
     for _, row in tqdm(meta.iterrows(), total=len(meta), desc="Embedding series"):
-        series_id = str(row["series_id"])
         patient_id = str(row["patient_id"])
 
-        series_dir = _find_series_dir(root, series_id)
-        if series_dir is None:
-            logger.warning(f"Series directory '{series_id}' not found under {root}; skipping")
+        image_file = Path(row[args.image_col])
+        mask_file = Path(row[args.mask_col]) if args.mask_col and args.mask_col in row else None
+        if not image_file.exists():
+            logger.warning(f"Image file for patient '{patient_id}' not found at {image_file}; skipping")
             continue
 
+        if args.clip_min is not None or args.clip_max is not None:
+            image_file = utils.clip_intensity_range(image_file, clip_min=args.clip_min, clip_max=args.clip_max, out=True)
+
+        if args.resample_spacing is not None:
+            target_spacing = tuple(map(float, args.resample_spacing.split(",")))
+            image_file = utils.resample_image(image_file, target_spacing=target_spacing, is_label=False, out=True)
+            mask_file = utils.resample_image(mask_file, target_spacing=target_spacing, is_label=True, out=True)
+        
+        if args.apply_mask and mask_file is not None:
+            image_file, mask_file = utils.apply_mask(image_file, mask_file, label=1, min_value=args.clip_min, crop=True, pad_after_crop=5, out_image=True, out_mask=True)
+        
+        if args.crop_size is not None:
+            xdim, ydim, zdim = map(int, args.crop_size.split(","))
+            image_file = utils.crop_and_pad(image_file, xdim=xdim, ydim=ydim, zdim=zdim, min_value=args.clip_min, out=True)
+            mask_file = utils.crop_and_pad(mask_file, xdim=xdim, ydim=ydim, zdim=zdim, min_value=0, out=True)
+
+        if args.normalize:
+            image_file = utils.normalize_intensity(image_file, normalization_method="volume", out=True)
+
+        logger.debug(f"image_file: {image_file}, mask_file: {mask_file}")
+        
         if args.embedder == "pyradiomics":
-            mask_dir = Path(args.mask_dir) if args.mask_dir else None
-            features = _embed_pyradiomics(series_dir, mask_dir, pyrad_params)
+            features = extractor.execute(image_file, mask_file, label=label)
+        elif args.embedder == "radimagenet":
+            features = _embed_radimagenet(image_file, args.model_path, args.device, args.model_type)
         else:
-            features = _embed_radimagenet(series_dir, args.model_path, args.device)
+            raise ValueError(f"Unsupported embedder: {args.embedder}")
 
         if features is None:
-            logger.warning(f"No features extracted for series {series_id} ({patient_id}); skipping")
+            logger.warning(f"No features extracted for patient {patient_id}; skipping")
             continue
 
         features["patient_id"] = patient_id
-        features["series_id"] = series_id
         for col in args.extra_meta_cols:
             if col in row.index:
                 features[col] = row[col]

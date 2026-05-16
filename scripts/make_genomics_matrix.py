@@ -64,24 +64,9 @@ def annotate_maf(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ---------------------------------------------------------------------------
-# Pathway scoring (mirrors RRPP_2026 logic without the dependency)
-# ---------------------------------------------------------------------------
-
 def _get_pathway_library(name: str = "KEGG_2016") -> dict[str, set[str]]:
-    try:
-        import gseapy as gp
-        lib = gp.get_library(name=name)
-    except ImportError:
-        try:
-            import gget
-            raw = gget.enrichr(genes=[], database=name, quiet=True)
-            raise RuntimeError("gget enrichr doesn't return pathway→gene maps; install gseapy")
-        except Exception:
-            raise ImportError(
-                "gseapy is required for pathway mode: pip install gseapy. "
-                "Alternatively pass --pathway_library_path with a GMT file."
-            )
+    import gseapy as gp
+    lib = gp.get_library(name=name)
     return {k: set(map(str.upper, v)) for k, v in lib.items()}
 
 
@@ -171,7 +156,7 @@ def matrix_to_adata(
 def parse_args():
     parser = argparse.ArgumentParser(description="Build patient × genomic-feature AnnData from MAF file(s)")
     parser.add_argument("inputs", nargs="+", help="One or more MAF files (.maf or .maf.gz)")
-    parser.add_argument("--out", required=True, help="Output .h5ad path")
+    parser.add_argument("-o", "--out", required=True, help="Output .h5ad path")
     parser.add_argument(
         "--feature", choices=["variant_id", "gene_symbol", "pathway"], default="gene_symbol",
         help="Feature granularity for the var axis"
@@ -214,8 +199,13 @@ def main():
         filter_path = Path(args.patient_ids)
         if filter_path.suffix == ".parquet":
             pid_df = pd.read_parquet(filter_path)
+        elif filter_path.suffix in {".csv", ".tsv"}:
+            pid_df = pd.read_csv(filter_path, sep="\t" if filter_path.suffix == ".tsv" else ",")
+        elif filter_path.suffix == ".txt":
+            pid_df = pd.read_csv(filter_path, header=None, names=["patient_id"])
         else:
-            pid_df = pd.read_csv(filter_path)
+            raise ValueError(f"Unsupported patient_ids file format: {filter_path.suffix}")
+
         if "patient_id" not in pid_df.columns:
             raise ValueError(f"patient_ids file must have a 'patient_id' column")
         keep = set(pid_df["patient_id"].astype(str))

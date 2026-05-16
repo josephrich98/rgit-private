@@ -41,7 +41,7 @@ The analysis draws on:
 ## Setup
 
 ```bash
-pip install -e .
+pip install -e .[processing,notebooks,dev]
 ```
 
 Python 3.10+ is recommended. Dependencies are declared in `pyproject.toml`.
@@ -49,6 +49,29 @@ Python 3.10+ is recommended. Dependencies are declared in `pyproject.toml`.
 ## Usage
 
 Analysis notebooks are in `notebooks/`. Reusable estimation utilities live in the `rgit/` package. Batch scripts for large-scale runs are in `scripts/`.
+
+papermill notebooks/radiogenomic_recoverability.ipynb notebooks/radiogenomic_recoverability_output_synthetic.ipynb  # synthetic data
+
+python scripts/process_imaging.py -d data/tcga_kirc/imaging
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/whole_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --embedder pyradiomics
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/organ_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --mask_col mask_organ --embedder pyradiomics
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/tumor_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --mask_col mask_tumor --embedder pyradiomics
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/whole_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --embedder radimagenet --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 625,625,200
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/organ_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --mask_col mask_organ --embedder radimagenet --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 185,185,75
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/tumor_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --mask_col mask_tumor --embedder radimagenet --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 185,185,75
+
+wget -O data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz https://api.gdc.cancer.gov/data/1c8cfe5f-e52d-41ba-94da-f15ea1337efc
+python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_genes.h5ad data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz --feature gene_symbol --patient_ids data/tcga_kirc/imaging
+python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_pathways.h5ad data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz --feature pathway --patient_ids data/tcga_kirc/imaging
+
+
+for genomics_h5ad in data/tcga_kirc/genomics/*.h5ad; do
+    for imaging_h5ad in data/tcga_kirc/imaging/*_radimagenet.h5ad; do
+        echo "Running recoverability analysis for genomics: $genomics_h5ad and imaging: $imaging_h5ad"
+        output_notebook="notebooks/radiogenomic_recoverability_output_genomics_$(basename ${genomics_h5ad%.*})_imaging_$(basename ${imaging_h5ad%.*}).ipynb"
+        papermill notebooks/radiogenomic_recoverability.ipynb "$output_notebook" -p GENOMICS_H5AD "$genomics_h5ad" -p IMAGING_H5AD "$imaging_h5ad"
+    done
+done
 
 ## Status
 

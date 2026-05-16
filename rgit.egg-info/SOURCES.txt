@@ -2,6 +2,7 @@ README.md
 pyproject.toml
 rgit/__init__.py
 rgit/model.py
+rgit/radimagenet.py
 rgit.egg-info/PKG-INFO
 rgit.egg-info/SOURCES.txt
 rgit.egg-info/dependency_links.txt

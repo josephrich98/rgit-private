@@ -17,9 +17,12 @@ dependencies = [
     "pandas>=2.0",
     "anndata>=0.10",
     "matplotlib>=3.7",
+    "tqdm>=4.0",
+    "pydantic>=2.0"
 ]
 
 [project.optional-dependencies]
+processing = ["gseapy", "SimpleITK>=2.0", "nibabel>=3.0", "pyradiomics>=3.0", "torch>=2.0", "torchvision>=0.15", "Pillow>=9.0", "tcia_radiology_processing"]
 notebooks = ["jupyter>=1.0", "ipykernel>=6.0"]
 dev = ["pytest>=7.0"]
 

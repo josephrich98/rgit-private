@@ -191,7 +191,7 @@ def build_gene_expression_matrix(
 
     for inp in inputs:
         p = Path(inp)
-        if tarfile.is_tarfile(inp):
+        if p.is_file() and tarfile.is_tarfile(inp):
             with tarfile.open(inp, "r:gz") as tf:
                 members = [m for m in tf.getmembers() if m.name.endswith(".tsv")]
                 for member in tqdm(members, desc=f"Reading {p.name}"):
@@ -224,7 +224,7 @@ def build_gene_expression_matrix(
 
     # build var metadata (gene_name) from first sample
     inp0 = inputs[0]
-    if tarfile.is_tarfile(inp0):
+    if p.is_file() and tarfile.is_tarfile(inp0):
         with tarfile.open(inp0, "r:gz") as tf:
             first = next(m for m in tf.getmembers() if m.name.endswith(".tsv"))
             fobj = tf.extractfile(first)

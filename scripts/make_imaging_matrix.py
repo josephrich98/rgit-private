@@ -46,7 +46,7 @@ def _load_radimagenet_model(model_type: str, model_path: str | None, device: str
     key = (model_type, str(model_path), device)
     if key not in _MODEL_CACHE:
         model = RadImageNetEmbedding(model_type)
-        if model_path is not None:
+        if model_path is not None and Path(model_path).exists():
             state = torch.load(model_path, map_location=device)
             # Support bare state-dicts and common checkpoint wrappers
             if isinstance(state, dict):
@@ -54,7 +54,7 @@ def _load_radimagenet_model(model_type: str, model_path: str | None, device: str
             model.load_state_dict(state, strict=False)
             logger.info(f"Loaded RadImageNet weights from {model_path}")
         else:
-            raise ValueError("Model path must be provided for RadImageNet embedder. You can find it at https://drive.google.com/file/d/1RHt2GnuOYlc_gcoTETtBDSW73mFyRAtR/view?usp=sharing. gdown 'https://drive.google.com/uc?id=1RHt2GnuOYlc_gcoTETtBDSW73mFyRAtR' -O RadImageNet_pytorch.zip.")
+            raise ValueError("Model path must be provided and existing for RadImageNet embedder. You can find it at https://drive.google.com/file/d/1RHt2GnuOYlc_gcoTETtBDSW73mFyRAtR/view?usp=sharing. gdown 'https://drive.google.com/uc?id=1RHt2GnuOYlc_gcoTETtBDSW73mFyRAtR' -O RadImageNet_pytorch.zip && unzip RadImageNet_pytorch.zip.")
         model.to(device).eval()
         _MODEL_CACHE[key] = model
     return _MODEL_CACHE[key]
@@ -107,7 +107,7 @@ def parse_args():
     parser.add_argument("-o", "--out", default="imaging.h5ad", help="Output .h5ad path")
     parser.add_argument("-e", "--embedder", choices=["pyradiomics", "radimagenet"], default="pyradiomics", help="Embedding method to use")
     parser.add_argument("--pyradiomics_params", default=None, help="[pyradiomics] Path to YAML params file for RadiomicsFeatureExtractor")
-    parser.add_argument("--model_path", default=None, help="[radimagenet] Path to pretrained model checkpoint (.pth)")
+    parser.add_argument("--model_path", default=None, help="[radimagenet] Path to pretrained model checkpoint (.pt)")
     parser.add_argument("--model_type", default="resnet50", choices=["resnet50", "densenet121", "inceptionv3"], help="[radimagenet] Backbone architecture")
     parser.add_argument("--device", default="cpu", help="[radimagenet] Torch device (cpu, cuda, mps)")
     parser.add_argument("--extra_meta_cols", nargs="*", default=[], help="Additional metadata columns from the metadata file to store in adata.obs")
@@ -159,6 +159,7 @@ def main():
         if not image_file.exists():
             logger.warning(f"Image file for patient '{patient_id}' not found at {image_file}; skipping")
             continue
+        image_file = str(image_file)
             
         if args.mask_col and args.mask_col not in row:
             logger.warning(f"Mask column '{args.mask_col}' specified but not found in metadata for patient '{patient_id}'; ignoring mask for this patient")
@@ -167,6 +168,7 @@ def main():
         if mask_file and not mask_file.exists():
             logger.warning(f"Mask file for patient '{patient_id}' not found at {mask_file}; ignoring mask for this patient")
             mask_file = None
+        mask_file = str(mask_file) if mask_file else None
 
         if args.clip_min is not None or args.clip_max is not None:
             image_file = utils.clip_intensity_range(image_file, clip_min=args.clip_min, clip_max=args.clip_max, out=True)
@@ -178,7 +180,9 @@ def main():
                 mask_file = utils.resample_image(mask_file, target_spacing=target_spacing, is_label=True, out=True)
         
         if args.apply_mask and mask_file is not None:
-            image_file, mask_file = utils.apply_mask(image_file, mask_file, label=args.label, min_value=args.clip_min, crop=True, pad_after_crop=5, out_image=True, out_mask=True)
+            out_image = image_file.replace(".nii", f"_{args.mask_col}_masked.nii")
+            out_mask = mask_file.replace(".nii", f"_{args.mask_col}_masked.nii")
+            image_file, mask_file = utils.apply_mask(image_file, mask_file, label=args.label, min_value=args.clip_min, crop=True, pad_after_crop=5, out_image=out_image, out_mask=out_mask)
         
         if args.crop_size is not None:
             xdim, ydim, zdim = map(int, args.crop_size.split(","))
@@ -188,12 +192,23 @@ def main():
 
         if args.normalize:
             image_file = utils.normalize_intensity(image_file, normalization_method="volume", out=True)
+        
+        if mask_file is None:
+            # create dummy (nearly) all 1s mask
+            mask_file = os.path.join(os.path.dirname(image_file), "dummy_mask.nii.gz")
+            args.label = 1
+            if not os.path.exists(mask_file):
+                sitk_img = sitk.ReadImage(image_file)
+                mask_arr = np.zeros(sitk.GetArrayFromImage(sitk_img).shape, dtype=np.uint8)
+                mask_arr[1:-1, 1:-1, 1:-1] = 1
+                sitk_mask = sitk.GetImageFromArray(mask_arr)
+                sitk_mask.CopyInformation(sitk_img)
+                sitk.WriteImage(sitk_mask, mask_file)
 
         logger.debug(f"image_file: {image_file}, mask_file: {mask_file}")
         
         if args.embedder == "pyradiomics":
-            label_radiomics = args.label if mask_file is not None else None
-            features = extractor.execute(str(image_file), str(mask_file), label=label_radiomics)
+            features = extractor.execute(image_file, mask_file, label=args.label)
         elif args.embedder == "radimagenet":
             features = _embed_radimagenet(image_file, args.model_path, args.device, args.model_type)
         else:
@@ -219,11 +234,9 @@ def main():
     obs_df = feat_df[meta_cols].copy()
     X_df = feat_df.drop(columns=meta_cols, errors="ignore")
 
-    radiomic_cols = [
-        c for c in X_df.columns
-        if c.startswith("original_")
-    ]
-    X_df = X_df[radiomic_cols]  # keep only radiomic features
+    prefix = "original_" if args.embedder == "pyradiomics" else "radimagenet_"
+    feature_cols = [c for c in X_df.columns if c.startswith(prefix)]
+    X_df = X_df[feature_cols]
     X_df = X_df.map(
         lambda x: x.item() if isinstance(x, np.ndarray) else x
     )

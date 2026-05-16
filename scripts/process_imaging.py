@@ -20,7 +20,7 @@ args = parser.parse_args()
 
 data_dir = args.data_dir
 
-metadata_name = "metadata_usc.csv"
+metadata_name = "metadata.csv"
 imaging_metadata_csv = os.path.join(data_dir, metadata_name)
 
 if os.path.exists(imaging_metadata_csv):
@@ -49,8 +49,11 @@ for patient_id in tqdm(sorted(os.listdir(nifti_dir)), desc="Processing images"):
     image_file = os.path.join(patient_dir, image_filename)
     mask_file = os.path.join(patient_dir, tumor_mask_filename)
 
-    image_file = utils.set_canonical_orientation(image_file, out=True)
-    mask_file = utils.set_canonical_orientation(mask_file, out=True)
+    image_filename = "imaging_oriented.nii.gz"
+    tumor_mask_filename = "segmentation_tumor_oriented.nii.gz"
+    
+    image_file = utils.set_canonical_orientation(image_file, out=os.path.join(patient_dir, image_filename))
+    mask_file = utils.set_canonical_orientation(mask_file, out=os.path.join(patient_dir, tumor_mask_filename))
 
 logger.info(f"Running TotalSegmentator to segment kidneys and create combined tumor+organ masks")
 utils.run_totalsegmentator(nifti_dir, selected_segmentations=["kidney_left", "kidney_right"], metadata_csv=imaging_metadata_csv, metadata_csv_out=imaging_metadata_csv, remove_small_blobs=True, fill_holes=True, morphological_closing=True, image_filename=image_filename, tumor_mask_filename=tumor_mask_filename, combined_organ_mask_filename="segmentation_organs.nii.gz", mask_filename_out=tumor_and_organ_mask_filename, visualize=False)
@@ -64,7 +67,7 @@ for patient_id in tqdm(sorted(os.listdir(nifti_dir)), desc="Processing images"):
     mask_data = mask.get_fdata()
     mask_data[mask_data >= 1] = 1
     new_mask = nib.Nifti1Image(mask_data, mask.affine, mask.header)
-    nib.save(new_mask, tumor_and_organ_mask_binary_filename)
+    nib.save(new_mask, os.path.join(patient_dir, tumor_and_organ_mask_binary_filename))
 
 logger.info(f"Updating imaging metadata CSV at {imaging_metadata_csv} with paths to processed images and masks")
 metadata_df["image"] = metadata_df["patient_id"].apply(lambda sid: os.path.join(nifti_dir, sid, image_filename))

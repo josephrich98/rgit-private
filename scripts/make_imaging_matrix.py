@@ -39,6 +39,8 @@ from rgit.radimagenet import (
 # Module-level cache so the model is loaded once per (type, path, device) triple.
 _MODEL_CACHE: dict[tuple[str, str, str], RadImageNetEmbedding] = {}
 
+repo_dir = Path(__file__).parent.parent
+
 
 def _load_radimagenet_model(model_type: str, model_path: str | None, device: str) -> RadImageNetEmbedding:
     key = (model_type, str(model_path), device)
@@ -101,6 +103,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Build patient × imaging-feature AnnData")
     parser.add_argument("-m", "--metadata", required=True, help="CSV/parquet with columns 'patient_id' and <image_col>")
     parser.add_argument("-i", "--image_col", default="image", help="Column name in metadata containing image paths")
+    parser.add_argument("--data_base_dir", default=repo_dir, help="Base directory for imaging data (e.g. where nifti files are stored); used for downloading data if not already present")
     parser.add_argument("-o", "--out", default="imaging.h5ad", help="Output .h5ad path")
     parser.add_argument("-e", "--embedder", choices=["pyradiomics", "radimagenet"], default="pyradiomics", help="Embedding method to use")
     parser.add_argument("--pyradiomics_params", default=None, help="[pyradiomics] Path to YAML params file for RadiomicsFeatureExtractor")
@@ -113,6 +116,7 @@ def parse_args():
     parser.add_argument("--clip_max", type=float, default=None, help="Maximum intensity value to clip to (pyradiomics)")
     parser.add_argument("--resample_spacing", type=str, default=None, help="Target spacing for resampling (mm), e.g. '1.0,1.0,1.0'")
     parser.add_argument("--apply_mask", action="store_true", help="Whether to apply the mask to the image before feature extraction")
+    parser.add_argument("--label", type=int, default=1, help="Label value in the mask to apply (if --apply_mask is set)")
     parser.add_argument("--crop_size", type=str, default=None, help="Target size for cropping/padding (voxels), e.g. '128,128,64'")
     parser.add_argument("--normalize", action="store_true", help="Whether to z-score normalize features across the dataset")
     return parser.parse_args()
@@ -137,26 +141,32 @@ def main():
     
     if args.embedder == "pyradiomics":
         from radiomics import featureextractor
-        args.clip_min, args.clip_max, args.resample_spacing, args.apply_mask, args.crop_size, args.normalize = None, None, None, None, None, None
         extractor = featureextractor.RadiomicsFeatureExtractor(args.pyradiomics_params)
-        label = 1 if mask_file else None
 
         # utils.prepare_csv_for_pyradiomics(nifti_dir, output_csv_path=pyradiomics_input_csv_path, imaging_file_name=image_filename, mask_file_name=mask_filename)  # image_filename_nii, mask_filename_nii
         # pyradiomics_command = "pyradiomics <path/to/csv> -j 32"
         # if args.pyradiomics_params:
         #     pyradiomics_command += f" --param {args.pyradiomics_params}"
         # subprocess.run(pyradiomics_command, shell=True, check=True)
-
+    
     # --- embed each series ---
     records = []
     for _, row in tqdm(meta.iterrows(), total=len(meta), desc="Embedding series"):
         patient_id = str(row["patient_id"])
 
         image_file = Path(row[args.image_col])
-        mask_file = Path(row[args.mask_col]) if args.mask_col and args.mask_col in row else None
+        image_file = args.data_base_dir / image_file if not image_file.is_absolute() else image_file
         if not image_file.exists():
             logger.warning(f"Image file for patient '{patient_id}' not found at {image_file}; skipping")
             continue
+            
+        if args.mask_col and args.mask_col not in row:
+            logger.warning(f"Mask column '{args.mask_col}' specified but not found in metadata for patient '{patient_id}'; ignoring mask for this patient")
+        mask_file = Path(row[args.mask_col]) if args.mask_col and args.mask_col in row else None
+        mask_file = args.data_base_dir / mask_file if mask_file and not mask_file.is_absolute() else mask_file
+        if mask_file and not mask_file.exists():
+            logger.warning(f"Mask file for patient '{patient_id}' not found at {mask_file}; ignoring mask for this patient")
+            mask_file = None
 
         if args.clip_min is not None or args.clip_max is not None:
             image_file = utils.clip_intensity_range(image_file, clip_min=args.clip_min, clip_max=args.clip_max, out=True)
@@ -164,15 +174,17 @@ def main():
         if args.resample_spacing is not None:
             target_spacing = tuple(map(float, args.resample_spacing.split(",")))
             image_file = utils.resample_image(image_file, target_spacing=target_spacing, is_label=False, out=True)
-            mask_file = utils.resample_image(mask_file, target_spacing=target_spacing, is_label=True, out=True)
+            if mask_file is not None:
+                mask_file = utils.resample_image(mask_file, target_spacing=target_spacing, is_label=True, out=True)
         
         if args.apply_mask and mask_file is not None:
-            image_file, mask_file = utils.apply_mask(image_file, mask_file, label=1, min_value=args.clip_min, crop=True, pad_after_crop=5, out_image=True, out_mask=True)
+            image_file, mask_file = utils.apply_mask(image_file, mask_file, label=args.label, min_value=args.clip_min, crop=True, pad_after_crop=5, out_image=True, out_mask=True)
         
         if args.crop_size is not None:
             xdim, ydim, zdim = map(int, args.crop_size.split(","))
             image_file = utils.crop_and_pad(image_file, xdim=xdim, ydim=ydim, zdim=zdim, min_value=args.clip_min, out=True)
-            mask_file = utils.crop_and_pad(mask_file, xdim=xdim, ydim=ydim, zdim=zdim, min_value=0, out=True)
+            if mask_file is not None:
+                mask_file = utils.crop_and_pad(mask_file, xdim=xdim, ydim=ydim, zdim=zdim, min_value=0, out=True)
 
         if args.normalize:
             image_file = utils.normalize_intensity(image_file, normalization_method="volume", out=True)
@@ -180,7 +192,8 @@ def main():
         logger.debug(f"image_file: {image_file}, mask_file: {mask_file}")
         
         if args.embedder == "pyradiomics":
-            features = extractor.execute(image_file, mask_file, label=label)
+            label_radiomics = args.label if mask_file is not None else None
+            features = extractor.execute(str(image_file), str(mask_file), label=label_radiomics)
         elif args.embedder == "radimagenet":
             features = _embed_radimagenet(image_file, args.model_path, args.device, args.model_type)
         else:
@@ -202,13 +215,21 @@ def main():
     feat_df = pd.DataFrame(records)
     feat_df = feat_df.set_index("patient_id")
 
-    meta_cols = ["series_id"] + [c for c in args.extra_meta_cols if c in feat_df.columns]
+    meta_cols = [c for c in (["series_id"] + args.extra_meta_cols) if c in feat_df.columns]
     obs_df = feat_df[meta_cols].copy()
     X_df = feat_df.drop(columns=meta_cols, errors="ignore")
 
-    # drop constant or all-NaN feature columns
-    X_df = X_df.dropna(axis=1, how="all")
-    X_df = X_df.loc[:, X_df.nunique() > 0]
+    radiomic_cols = [
+        c for c in X_df.columns
+        if c.startswith("original_")
+    ]
+    X_df = X_df[radiomic_cols]  # keep only radiomic features
+    X_df = X_df.map(
+        lambda x: x.item() if isinstance(x, np.ndarray) else x
+    )
+    X_df = X_df.apply(pd.to_numeric, errors="coerce")  # convert to numeric, setting non-convertible values to NaN
+    X_df = X_df.dropna(axis=1, how="all")  # drop all-NaN columns
+    X_df = X_df.loc[:, X_df.nunique(dropna=False) > 1]  # drop constant columns
 
     X = csr_matrix(X_df.values.astype(np.float32))
     adata = ad.AnnData(

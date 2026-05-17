@@ -803,6 +803,166 @@ cross-validated estimate of each. The governing principle is that radiogenomics
 should target \emph{image-identifiable low-dimensional genomic subspaces}, whose
 dimension is set by the biology--imaging channel and not by the gene panel size.
 
+\section{A Bernoulli extension for mutation data via a Gaussian copula}
+\label{sec:bernoulli}
+
+The linear--Gaussian model of Section~\ref{sec:setup} is well matched to
+continuous, approximately log-normal genomic readouts: log-CPM gene expression,
+methylation $\beta$- or $M$-values, log-CNV ratios. It is plainly misspecified
+for somatic mutation calls, where each $G_j \in \{0,1\}$ indicates the presence
+of a non-silent variant in gene $j$ and the marginal frequencies $p_j$ are
+small, gene-specific, and highly heterogeneous. This section extends the
+framework to such data by replacing the Gaussian prior on $G$ with a
+\emph{Gaussian-copula Bernoulli} (equivalently, multivariate probit) prior,
+while preserving the canonical-correlation / mutual-information machinery of
+Sections~\ref{sec:mi}--\ref{sec:canonical}.
+
+\subsection{The latent-Gaussian generative model}
+\label{sec:bern-model}
+
+Let $p_j = \Pr(G_j = 1)$ and $\tau_j = \Phi^{-1}(1-p_j)$, where $\Phi$ is the
+standard normal CDF. Introduce a latent vector
+\[
+  Z \sim \mathcal N(0, \Sigma_Z), \qquad
+  \mathrm{diag}(\Sigma_Z) = I_p,
+\]
+and define the observed mutation indicator by thresholding:
+\[
+  G_j = \mathbf{1}\!\{Z_j > \tau_j\}, \qquad j = 1,\ldots,p.
+\]
+By construction the marginals are correct, $G_j \sim \mathrm{Bern}(p_j)$, and
+the pairwise joint laws are governed by the tetrachoric correlation $\Sigma_{Z,jk}$,
+which can be any positive-definite correlation matrix --- providing arbitrary
+dependence structure between mutated genes (e.g.\ mutual exclusivity,
+co-occurrence within pathways).
+
+Imaging is coupled to the \emph{latent} state, not to the indicators directly:
+\begin{equation}
+  X \mid Z \sim \mathcal N\!\bigl(B\,Z,\ \sigma^2 I_d\bigr),
+  \qquad
+  B \in \R^{d \times p}.
+  \label{eq:bern-channel}
+\end{equation}
+This is the natural specification: the biological mechanism that produces an
+imageable phenotype (proliferation, vascularity, necrosis) responds to an
+underlying continuous burden, of which an observed mutation is a coarse,
+binarized readout. The joint structure factors as
+\[
+  Z \to G,\qquad Z \to X,
+\]
+so $G$ and $X$ are conditionally independent given $Z$.
+
+\subsection{Mutual information and a tight DPI bound}
+\label{sec:bern-mi}
+
+Because $G$ is a deterministic, memoryless function of $Z$, the data
+processing inequality yields the upper bound
+\begin{equation}
+  I(G;X) \;\le\; I(Z;X),
+  \label{eq:bern-dpi}
+\end{equation}
+with equality only if $Z$ can be recovered from $G$ (impossible whenever any
+$p_j \in (0,1)$, since thresholding is lossy). The right-hand side reduces
+exactly to the Gaussian formula of Section~\ref{sec:mi}: if $\{\rho_i\}_{i=1}^{k}$
+denote the canonical correlations of $(Z,X)$ under \eqref{eq:bern-channel}, then
+\begin{equation}
+  I(Z;X) \;=\; -\tfrac{1}{2}\sum_{i=1}^{k} \log\bigl(1-\rho_i^2\bigr),
+  \qquad
+  k = \rank\bigl(\Sigma_Z^{1/2} B^\top \Sigma_X^{-1} B \Sigma_Z^{1/2}\bigr),
+  \label{eq:bern-mi}
+\end{equation}
+with $\Sigma_X = B \Sigma_Z B^\top + \sigma^2 I_d$. The recoverability spectrum,
+the directions $\{a_i\}$, and the eigenproblem of
+Section~\ref{sec:eigenproblem} all transfer verbatim, with $\Sigma_G$ replaced
+by $\Sigma_Z$.
+
+\paragraph{The binarization gap.}
+The slack in \eqref{eq:bern-dpi} is
+\[
+  I(Z;X) - I(G;X) \;=\; H(Z\mid G) - H(Z\mid G,X) \;=\; I(Z;X \mid G),
+\]
+the residual information about $Z$ not already revealed by the mutation call.
+For a single gene with frequency $p_j$, the entropy lost to binarization is
+$H(Z_j) - H(G_j) = \tfrac12 \log(2\pi e) - h_2(p_j)$ where $h_2$ is the binary
+entropy in nats; rare mutations ($p_j \ll 1/2$) are highly lossy, common ones
+near $p_j = 1/2$ less so. Thus \eqref{eq:bern-dpi} is tightest for cohorts
+dominated by intermediate-frequency mutations and loosest for rare-variant
+panels --- a useful guide to when the bound is informative.
+
+\subsection{Per-gene recoverability and AUC ceilings}
+\label{sec:bern-pergene}
+
+For a named mutation $G_j$, the Bayes-optimal predictor from $X$ is the
+posterior probability
+\[
+  \pi_j(x) \;=\; \Pr(G_j = 1 \mid X = x) \;=\; \Phi\!\left(\frac{\mu_j(x) - \tau_j}{s_j}\right),
+\]
+where $(\mu_j(x), s_j^2) = (\E[Z_j \mid X=x],\ \Var(Z_j \mid X=x))$ are the
+linear-Gaussian posterior moments for the latent coordinate, computed from
+$(\Sigma_Z, B, \sigma^2)$ exactly as in Section~\ref{sec:posterior}. The
+\emph{latent recoverability} $R_j^Z = \Var(\E[Z_j\mid X]) / \Var(Z_j)$ is the
+direct analogue of $R(v)$ in the Gaussian case, and the binary AUC of any
+predictor $\hat G_j(x)$ is bounded by
+\begin{equation}
+  \mathrm{AUC}_j \;\le\; \Phi\!\left(\sqrt{\tfrac{R_j^Z}{1-R_j^Z}}\Big/\sqrt{2}\right),
+  \label{eq:bern-auc}
+\end{equation}
+attained by the Bayes classifier $\pi_j(x) > p_j$. Equation~\eqref{eq:bern-auc}
+is the natural object to compare against the empirical per-gene
+$\mathrm{AUC}_{\mathrm{LR}}$ and $\mathrm{AUC}_{\mathrm{RF}}$ of
+Section~\ref{sec:kirc-pergene}: an empirical AUC near $0.5$ is consistent with
+either a small $R_j^Z$ \emph{or} a degenerate $p_j$, and \eqref{eq:bern-auc}
+disentangles the two.
+
+\subsection{Estimation}
+\label{sec:bern-estimation}
+
+The estimator splits into three independent pieces, each well-studied:
+
+\begin{enumerate}
+\item[(i)] \textbf{Marginal thresholds.} Estimate $\hat p_j = \bar G_{\cdot j}$
+and set $\hat\tau_j = \Phi^{-1}(1-\hat p_j)$. Apply a continuity correction or
+empirical-Bayes shrinkage for rare mutations.
+\item[(ii)] \textbf{Latent correlation $\hat\Sigma_Z$.} Estimate pairwise
+tetrachoric correlations from $2{\times}2$ tables of $(G_j, G_k)$ by maximum
+likelihood under the bivariate-normal copula, then project the resulting matrix
+to the nearest positive-definite correlation matrix (e.g.\ Higham's
+\texttt{nearcorr}). For high-dimensional panels apply Ledoit--Wolf shrinkage as
+in Section~\ref{sec:estimation-cov}.
+\item[(iii)] \textbf{Cross-modal covariance $\hat\Sigma_{ZX}$.} The
+point-biserial covariance $\Cov(G_j, X_\ell)$ is related to the latent
+covariance by
+\[
+  \Cov(G_j, X_\ell) \;=\; \phi(\tau_j)\,\Cov(Z_j, X_\ell),
+\]
+where $\phi$ is the standard normal density. Estimate $\Cov(G_j,X_\ell)$ from
+the sample and rescale by $\phi(\hat\tau_j)$ to obtain $\hat\Sigma_{ZX, j\ell}$.
+\end{enumerate}
+
+With $(\hat\Sigma_Z, \hat\Sigma_{ZX}, \hat\Sigma_X)$ in hand, the regularized
+CCA of Section~\ref{sec:estimation-cca}, the permutation null of
+Section~\ref{sec:estimation-honest}, and the empirical MI bound carry over
+without further change. The dimensional-collapse warnings of
+Section~\ref{sec:estimation-regimes} are if anything \emph{more} acute, since
+tetrachoric estimation has higher variance than Pearson correlation,
+particularly for rare-rare gene pairs.
+
+\subsection{Mixed-modality genomics}
+\label{sec:bern-mixed}
+
+In practice a single cohort carries both continuous (expression, CNV) and
+binary (mutation) features. The copula formulation accommodates this by
+partitioning the latent vector as $Z = (Z^{\mathrm{cts}}, Z^{\mathrm{bin}})$
+with a single joint $\Sigma_Z$. The continuous block uses the identity link
+($G^{\mathrm{cts}} = Z^{\mathrm{cts}}$ up to marginal standardization) and the
+binary block uses the probit link of Section~\ref{sec:bern-model}. Estimation
+of $\Sigma_Z$ proceeds blockwise --- Pearson within the continuous block,
+tetrachoric within the binary block, polyserial across blocks --- after which
+the rest of the pipeline is identical. This is the route by which the present
+manuscript's gene-expression analysis (Section~\ref{sec:tcga-kirc}) and the
+per-gene mutation validation (Section~\ref{sec:kirc-pergene}) can be unified
+into a single coherent recoverability calculation.
+
 \section{Application: TCGA-KIRC}
 \label{sec:tcga-kirc}
 

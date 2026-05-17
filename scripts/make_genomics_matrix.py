@@ -1,21 +1,22 @@
 """
-Build a patient × genomic-feature AnnData from one or more MAF files or gene expression TSVs.
+Build a patient × genomic-feature AnnData from one or more MAF files,
+gene expression TSVs, or an ADNI microarray CSV.
 
-Feature modes (--feature):
+--dataset choices:
+  tcga   — MAF files (.maf/.maf.gz) or gene-expression tar.gz / directories
+  nsclc  — single gene-expression .txt / .txt.gz matrix (genes × samples)
+  adni   — ADNI_Gene_Expression_Profile.csv (single input)
+
+Feature modes for --dataset tcga (--feature):
   variant_id      — binary matrix: each column is a unique somatic variant
   gene_symbol     — binary matrix: each column is a mutated gene
   pathway         — binary matrix: each column is an altered pathway (KEGG_2016 by default)
   gene_expression — continuous matrix: each column is a gene (TPM by default)
-
-Output obs index is patient_id. For MAF modes X is sparse binary; for gene_expression X is float32.
 """
 
 import argparse
 import logging
-import os
-import sys
 import tarfile
-import warnings
 from pathlib import Path
 
 import anndata as ad
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# MAF loading
+# TCGA helpers
 # ---------------------------------------------------------------------------
 
 def load_maf(path: str) -> pd.DataFrame:
@@ -37,10 +38,8 @@ def load_maf(path: str) -> pd.DataFrame:
     if not p.exists():
         raise FileNotFoundError(f"MAF file not found: {path}")
     logger.info(f"Reading {path}...")
-    if str(path).endswith(".gz"):
-        df = pd.read_csv(path, sep="\t", comment="#", low_memory=False, compression="gzip")
-    else:
-        df = pd.read_csv(path, sep="\t", comment="#", low_memory=False)
+    compression = "gzip" if str(path).endswith(".gz") else None
+    df = pd.read_csv(path, sep="\t", comment="#", low_memory=False, compression=compression)
     logger.info(f"  → {df.shape[0]:,} rows, {df.shape[1]} columns")
     return df
 
@@ -51,7 +50,6 @@ def annotate_maf(df: pd.DataFrame) -> pd.DataFrame:
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"MAF is missing required columns: {missing}")
-
     df = df.copy()
     df["variant_id"] = (
         df["Chromosome"].astype(str)
@@ -97,7 +95,6 @@ def build_pathway_matrix(
     else:
         pathway_to_genes = _get_pathway_library(pathway_library)
 
-    # patient → set of mutated genes (uppercased)
     patient_to_genes: dict[str, set[str]] = (
         maf_df.groupby("patient_id")["gene_symbol"]
         .apply(lambda x: set(g.upper() for g in x if pd.notna(g)))
@@ -115,27 +112,18 @@ def build_pathway_matrix(
         records.append(row)
 
     pathway_df = pd.DataFrame(records).set_index("patient_id")
-    # drop pathways never altered
     pathway_df = pathway_df.loc[:, pathway_df.sum() > 0]
     return pathway_df
 
 
-# ---------------------------------------------------------------------------
-# Binary pivot helpers
-# ---------------------------------------------------------------------------
-
 def build_binary_matrix(maf_df: pd.DataFrame, feature_col: str) -> pd.DataFrame:
     """Binary patient × feature pivot table."""
-    sub = maf_df[["patient_id", feature_col]].dropna().drop_duplicates()
+    sub = maf_df[["patient_id", feature_col]].dropna().drop_duplicates().copy()
     sub["_present"] = 1
     mat = sub.pivot_table(index="patient_id", columns=feature_col, values="_present", fill_value=0)
     mat.columns.name = None
     return mat.astype(np.uint8)
 
-
-# ---------------------------------------------------------------------------
-# AnnData construction
-# ---------------------------------------------------------------------------
 
 def matrix_to_adata(
     mat: pd.DataFrame,
@@ -150,10 +138,6 @@ def matrix_to_adata(
     adata.var_names_make_unique()
     return adata
 
-
-# ---------------------------------------------------------------------------
-# Gene expression loading
-# ---------------------------------------------------------------------------
 
 def load_filename_to_patientid(path: str) -> dict[str, str]:
     """Load CSV mapping file_name → patient_id (entity_submitter_id)."""
@@ -172,7 +156,7 @@ _EXPRESSION_COLS = ["tpm_unstranded", "fpkm_unstranded", "fpkm_uq_unstranded", "
 def _read_expression_tsv(fileobj) -> tuple[pd.DataFrame, pd.Series]:
     """Return (expr_df, gene_name_series) indexed by gene_id, skipping summary rows."""
     df = pd.read_csv(fileobj, sep="\t", comment="#")
-    df = df[df["gene_name"].notna()]  # drop N_unmapped etc.
+    df = df[df["gene_name"].notna()]
     df = df.set_index("gene_id")
     return df[_EXPRESSION_COLS], df["gene_name"]
 
@@ -185,8 +169,7 @@ def build_gene_expression_matrix(
     Build patient × gene expression DataFrames from tar.gz or directory inputs.
 
     Returns (layers, var_meta_df) where layers is a dict keyed by expression
-    column name (e.g. 'tpm_unstranded') and var_meta_df has gene_name indexed
-    by gene_id.
+    column name and var_meta_df has gene_name indexed by gene_id.
     """
     frames: list[pd.DataFrame] = []
     patient_ids: list[str] = []
@@ -237,110 +220,49 @@ def build_gene_expression_matrix(
         )
         for col in _EXPRESSION_COLS
     }
-
     var_meta_df = pd.DataFrame({"gene_name": gene_names}, index=gene_ids)
-
     logger.info(f"Gene expression: {len(patient_ids)} patients × {len(gene_ids)} genes, {len(_EXPRESSION_COLS)} layers")
     return layers, var_meta_df
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Build patient × genomic-feature AnnData from MAF file(s)")
-    parser.add_argument("inputs", nargs="+", help="One or more MAF files (.maf or .maf.gz) or directories with structure dir/filename/file.ext or text matrix file")
-    parser.add_argument("-o", "--out", required=True, help="Output .h5ad path")
-    parser.add_argument(
-        "--feature", choices=["variant_id", "gene_symbol", "pathway", "gene_expression"], default="gene_symbol",
-        help="Feature granularity for the var axis"
-    )
-    parser.add_argument("--patient_ids", default=None, help="CSV/parquet with column 'patient_id' to restrict output")
-    parser.add_argument("--filename_to_patientid", default=None, help="Path to CSV if input files are organized as dir/filename/file.ext and patient_id is derived from filename (one column 'filename' with relative path from input dir, one column 'patient_id')")
-    parser.add_argument(
-        "--pathway_library", default="KEGG_2016",
-        help="[pathway mode] gseapy library name (default: KEGG_2016)"
-    )
-    parser.add_argument(
-        "--pathway_library_path", default=None,
-        help="[pathway mode] Path to a GMT file instead of downloading from gseapy"
-    )
-    parser.add_argument(
-        "--pathway_threshold", type=float, default=0.1,
-        help="[pathway mode] Fraction of pathway genes mutated to call pathway 'altered' (default: 0.1)"
-    )
-    parser.add_argument(
-        "--extra_obs_cols", nargs="*", default=[],
-        help="Extra MAF columns to pull into adata.obs (one value per patient, taken from first row)"
-    )
-    return parser.parse_args()
+def _filter_patients(maf_or_layer, patient_ids_path: str):
+    filter_path = Path(patient_ids_path)
+    if filter_path.suffix == ".parquet":
+        pid_df = pd.read_parquet(filter_path)
+    elif filter_path.suffix in {".csv", ".tsv"}:
+        pid_df = pd.read_csv(filter_path, sep="\t" if filter_path.suffix == ".tsv" else ",")
+    elif filter_path.suffix == ".txt":
+        pid_df = pd.read_csv(filter_path, header=None, names=["patient_id"])
+    else:
+        raise ValueError(f"Unsupported patient_ids file format: {filter_path.suffix}")
+    if "patient_id" not in pid_df.columns:
+        raise ValueError("patient_ids file must have a 'patient_id' column")
+    return set(pid_df["patient_id"].astype(str))
 
 
-def main():
-    args = parse_args()
-
+def build_tcga(args) -> ad.AnnData:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # -----------------------------------------------------------------------
-    # NSCLC txt matrix
-    # -----------------------------------------------------------------------
-    if len(args.inputs) == 1 and Path(args.inputs[0]).is_file() and args.inputs[0].endswith((".txt", ".txt.gz")):
-        path = args.inputs[0]
-
-        # load expression matrix
-        df = pd.read_csv(
-            path,
-            sep="\t",
-            index_col=0,
-            compression="gzip" if path.endswith(".gz") else None,
-        )
-
-        adata = ad.AnnData(
-            X=df.T.values,
-            obs=pd.DataFrame(index=df.columns),
-            var=pd.DataFrame(index=df.index),
-        )
-
-        adata.uns["feature_type"] = "gene_expression"
-        adata.uns["inputs"] = args.inputs
-        adata.write_h5ad(out_path)
-        logger.info(f"Saved gene expression AnnData: {adata.shape} → {out_path}")
-        return
-
-    # -----------------------------------------------------------------------
-    # Gene expression branch — entirely separate from MAF pipeline
-    # -----------------------------------------------------------------------
+    # gene expression branch (tar.gz or directory inputs)
     if args.feature == "gene_expression":
         if not args.filename_to_patientid:
             raise ValueError("--filename_to_patientid is required for --feature gene_expression")
-
         filename_to_patientid = load_filename_to_patientid(args.filename_to_patientid)
         logger.info(f"Loaded {len(filename_to_patientid)} filename→patient_id mappings")
 
-        layers, var_meta = build_gene_expression_matrix(
-            args.inputs,
-            filename_to_patientid=filename_to_patientid,
-        )
+        layers, var_meta = build_gene_expression_matrix(args.inputs, filename_to_patientid)
 
-        # optional patient filter (applied consistently across all layers)
         if args.patient_ids:
-            filter_path = Path(args.patient_ids)
-            if filter_path.suffix == ".parquet":
-                pid_df = pd.read_parquet(filter_path)
-            else:
-                pid_df = pd.read_csv(filter_path, sep="\t" if filter_path.suffix == ".tsv" else ",")
-            keep_patients = set(pid_df["patient_id"].astype(str))
-            layers = {k: v[v.index.isin(keep_patients)] for k, v in layers.items()}
+            keep = _filter_patients(None, args.patient_ids)
+            layers = {k: v[v.index.isin(keep)] for k, v in layers.items()}
             logger.info(f"After patient filter: {next(iter(layers.values())).shape[0]} patients")
 
         tpm = layers["tpm_unstranded"]
         if len(tpm) == 0:
             raise RuntimeError("No patients remain after filtering.")
 
-        obs_meta = pd.DataFrame(index=tpm.index)
-        adata = matrix_to_adata(tpm, obs_meta=obs_meta, var_meta=var_meta)
+        adata = matrix_to_adata(tpm, obs_meta=pd.DataFrame(index=tpm.index), var_meta=var_meta)
         for col, mat in layers.items():
             adata.layers[col] = csr_matrix(mat.values.astype(np.float32))
         adata.uns["feature_type"] = "gene_expression"
@@ -348,13 +270,9 @@ def main():
         adata.uns["inputs"] = args.inputs
         adata.write_h5ad(out_path)
         logger.info(f"Saved gene expression AnnData: {adata.shape} → {out_path}")
-        return
+        return adata
 
-    # -----------------------------------------------------------------------
-    # MAF-based branches (variant_id, gene_symbol, pathway)
-    # -----------------------------------------------------------------------
-
-    # --- load & concatenate MAFs ---
+    # MAF branch (variant_id, gene_symbol, pathway)
     frames = []
     for path in args.inputs:
         df = load_maf(path)
@@ -364,28 +282,14 @@ def main():
     maf_df = pd.concat(frames, ignore_index=True)
     logger.info(f"Combined MAF: {len(maf_df):,} rows, {maf_df['patient_id'].nunique()} patients")
 
-    # --- optional patient filter ---
     if args.patient_ids:
-        filter_path = Path(args.patient_ids)
-        if filter_path.suffix == ".parquet":
-            pid_df = pd.read_parquet(filter_path)
-        elif filter_path.suffix in {".csv", ".tsv"}:
-            pid_df = pd.read_csv(filter_path, sep="\t" if filter_path.suffix == ".tsv" else ",")
-        elif filter_path.suffix == ".txt":
-            pid_df = pd.read_csv(filter_path, header=None, names=["patient_id"])
-        else:
-            raise ValueError(f"Unsupported patient_ids file format: {filter_path.suffix}")
-
-        if "patient_id" not in pid_df.columns:
-            raise ValueError(f"patient_ids file must have a 'patient_id' column")
-        keep = set(pid_df["patient_id"].astype(str))
+        keep = _filter_patients(maf_df, args.patient_ids)
         maf_df = maf_df[maf_df["patient_id"].isin(keep)]
         logger.info(f"After patient filter: {len(maf_df):,} rows, {maf_df['patient_id'].nunique()} patients")
 
     if len(maf_df) == 0:
         raise RuntimeError("No rows remain after filtering.")
 
-    # --- per-patient metadata for obs ---
     obs_meta_cols = ["patient_id"] + [c for c in args.extra_obs_cols if c in maf_df.columns]
     obs_meta = (
         maf_df[obs_meta_cols]
@@ -393,17 +297,14 @@ def main():
         .set_index("patient_id")
     )
 
-    # --- build feature matrix ---
     if args.feature == "variant_id":
         logger.info("Building variant_id binary matrix...")
         mat = build_binary_matrix(maf_df, "variant_id")
         var_meta = pd.DataFrame(index=mat.columns)
-
     elif args.feature == "gene_symbol":
         logger.info("Building gene_symbol binary matrix...")
         mat = build_binary_matrix(maf_df, "gene_symbol")
         var_meta = pd.DataFrame(index=mat.columns)
-
     elif args.feature == "pathway":
         logger.info(f"Building pathway binary matrix (library={args.pathway_library}, threshold={args.pathway_threshold})...")
         mat = build_pathway_matrix(
@@ -414,18 +315,151 @@ def main():
         )
         var_meta = pd.DataFrame(index=mat.columns)
 
-    # align obs_meta to mat index
     obs_meta = obs_meta.reindex(mat.index)
-
     logger.info(f"Feature matrix: {mat.shape[0]} patients × {mat.shape[1]} {args.feature}s")
 
     adata = matrix_to_adata(mat, obs_meta=obs_meta, var_meta=var_meta)
     adata.uns["feature_type"] = args.feature
     adata.uns["maf_inputs"] = args.inputs
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     adata.write_h5ad(out_path)
     logger.info(f"Saved genomics AnnData: {adata.shape} → {out_path}")
+    return adata
+
+
+# ---------------------------------------------------------------------------
+# NSCLC helpers
+# ---------------------------------------------------------------------------
+
+def build_nsclc(args) -> ad.AnnData:
+    path = args.inputs[0]
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    compression = "gzip" if path.endswith(".gz") else None
+    df = pd.read_csv(path, sep="\t", index_col=0, compression=compression)
+
+    adata = ad.AnnData(
+        X=df.T.values,
+        obs=pd.DataFrame(index=df.columns),
+        var=pd.DataFrame(index=df.index),
+    )
+    adata.uns["feature_type"] = "gene_expression"
+    adata.uns["inputs"] = args.inputs
+    adata.write_h5ad(out_path)
+    logger.info(f"Saved gene expression AnnData: {adata.shape} → {out_path}")
+    return adata
+
+
+# ---------------------------------------------------------------------------
+# ADNI helpers
+# ---------------------------------------------------------------------------
+
+def build_adni(args) -> ad.AnnData:
+    path = args.inputs[0]
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    raw = pd.read_csv(path, header=None, low_memory=False)
+    header_idx = raw.index[raw[0] == "ProbeSet"][0]
+
+    # sample metadata lives in rows above the expression header
+    metadata = raw.iloc[:header_idx].copy()
+    metadata.index = metadata[0]
+    sample_metadata_full = metadata.iloc[:, 3:].T.reset_index(drop=True)
+    sample_metadata_full.columns = metadata[0]
+
+    # track which positions survive the SubjectID filter
+    valid_mask = sample_metadata_full["SubjectID"].notna()
+    valid_positions = valid_mask[valid_mask].index.tolist()
+    sample_metadata = sample_metadata_full[valid_mask].reset_index(drop=True)
+
+    # expression matrix: probes × samples
+    expr = pd.read_csv(path, skiprows=header_idx)
+    non_sample_cols = [
+        c for c in ["ProbeSet", "LocusLink", "Symbol", "GeneSymbol", "GeneTitle", "Chromosome", "Cytoband"]
+        if c in expr.columns
+    ]
+    sample_cols = [c for c in expr.columns if c not in non_sample_cols]
+    sample_cols_valid = [sample_cols[i] for i in valid_positions]
+
+    X = expr[sample_cols_valid].apply(pd.to_numeric, errors="coerce").T
+
+    obs = sample_metadata.copy()
+    obs.index = sample_cols_valid
+
+    symbol_col = "Symbol" if "Symbol" in expr.columns else "GeneSymbol"
+    var = pd.DataFrame(
+        {"symbol": expr[symbol_col].astype(str).values},
+        index=expr["ProbeSet"].astype(str),
+    )
+    var.index.name = "gene_id"
+    X.columns = var.index
+
+    adata = ad.AnnData(X=X.values, obs=obs, var=var)
+    adata.uns["feature_type"] = "gene_expression"
+    adata.uns["inputs"] = args.inputs
+    adata.write_h5ad(out_path)
+    logger.info(f"Saved ADNI AnnData: {adata.shape} → {out_path}")
+    return adata
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Build patient × genomic-feature AnnData")
+    parser.add_argument(
+        "--dataset", required=True, choices=["tcga", "nsclc", "adni"],
+        help="Dataset type, controls which loading pipeline is used",
+    )
+    parser.add_argument(
+        "inputs", nargs="+",
+        help="Input path(s): MAF file(s) or tar.gz/directory (tcga), .txt/.txt.gz (nsclc), CSV (adni)",
+    )
+    parser.add_argument("-o", "--out", required=True, help="Output .h5ad path")
+    parser.add_argument(
+        "--feature", choices=["variant_id", "gene_symbol", "pathway", "gene_expression"],
+        default="gene_symbol",
+        help="[tcga] Feature granularity for the var axis",
+    )
+    parser.add_argument("--patient_ids", default=None, help="CSV/parquet with column 'patient_id' to restrict output")
+    parser.add_argument(
+        "--filename_to_patientid", default=None,
+        help="[tcga gene_expression] CSV mapping file_name → patient_id",
+    )
+    parser.add_argument(
+        "--pathway_library", default="KEGG_2016",
+        help="[tcga pathway] gseapy library name (default: KEGG_2016)",
+    )
+    parser.add_argument(
+        "--pathway_library_path", default=None,
+        help="[tcga pathway] Path to a GMT file instead of downloading from gseapy",
+    )
+    parser.add_argument(
+        "--pathway_threshold", type=float, default=0.1,
+        help="[tcga pathway] Fraction of pathway genes mutated to call pathway 'altered' (default: 0.1)",
+    )
+    parser.add_argument(
+        "--extra_obs_cols", nargs="*", default=[],
+        help="[tcga maf] Extra MAF columns to pull into adata.obs",
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    if args.dataset == "tcga":
+        build_tcga(args)
+    elif args.dataset == "nsclc":
+        if len(args.inputs) != 1 or not Path(args.inputs[0]).is_file() or not args.inputs[0].endswith((".txt", ".txt.gz")):
+            raise ValueError("--dataset nsclc expects a single .txt or .txt.gz input file")
+        build_nsclc(args)
+    elif args.dataset == "adni":
+        if len(args.inputs) != 1:
+            raise ValueError("--dataset adni expects a single input CSV path")
+        build_adni(args)
 
 
 if __name__ == "__main__":

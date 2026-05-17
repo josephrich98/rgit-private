@@ -156,6 +156,10 @@ trash/
 data
 runs
 runs/
+notebooks/figures
+notebooks/out
+notebooks/out/
+notebooks/out/*
 output
 output/
 outputs

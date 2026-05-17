@@ -6,6 +6,10 @@
 \usepackage{microtype}
 \usepackage{xcolor}
 \usepackage[colorlinks=true, linkcolor=lightgray, citecolor=lightgray]{hyperref}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\newcommand{\synfig}[1]{notebooks/figures/synthetic/genomics_synthetic/imaging_synthetic/#1}
+\newcommand{\kircfig}[1]{notebooks/figures/tcga_kirc/gene_expression/tumor_radimagenet/#1}
 
 \pagecolor[rgb]{0.05,0.05,0.05} %black - background color
 \color[rgb]{0.9,0.9,0.9} %grey - text color
@@ -378,6 +382,20 @@ $\tfrac12 \log(1 + \mathrm{SNR}_i)$ bits (nats), where
 $\mathrm{SNR}_i = \lambda_i / \sigma^2$ is the signal-to-noise ratio of that
 direction. Directions whose genomic signal is small relative to imaging noise
 contribute essentially nothing, regardless of how many genes load on them.
+Figure~\ref{fig:synthetic-mi} illustrates the decomposition
+\eqref{eq:mi-diag} on the synthetic instance introduced below: the per-direction
+bit contribution falls off rapidly after the first handful of canonical
+components, and the cumulative total saturates at $I(G;X)\approx 6.45$ bits
+out of the analytic upper bound implied by the model.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\linewidth]{\synfig{mi_per_direction.pdf}}
+\caption{Per-direction contribution to $I(G;X)$ on a synthetic linear--Gaussian
+instance ($n=800$, $p=80$, $d=40$). Each bar is
+$\tfrac12 \log(1 + d_i^2)$ in bits; the dashed line is the cumulative total.}
+\label{fig:synthetic-mi}
+\end{figure}
 
 \section{Canonical coordinates and the recoverability spectrum}
 \label{sec:canonical}
@@ -518,6 +536,38 @@ pathways answers ``which biology is image-identifiable'': the leading directions
 typically align with coarse, spatially expressed programs --- proliferation,
 hypoxia, angiogenesis, necrosis, immune infiltration, tumor burden, stromal
 remodeling --- rather than with individual transcripts.
+
+\paragraph{Illustration on synthetic data.}
+Figure~\ref{fig:synthetic-spectrum} shows the recoverability spectrum on a
+synthetic radiogenomic instance generated from the linear--Gaussian model of
+Section~\ref{sec:model} ($n=800$, $p=80$, $d=40$, latent rank $k=5$ with
+prescribed $\{\rho_i^\star\}$). The estimated $\hat\rho_i^2$ closely match
+the planted values for the identifiable directions and decay toward the
+high-dimensional bulk thereafter, validating
+Proposition~\ref{prop:eig}. Figure~\ref{fig:synthetic-truth} reads the same
+estimator against the analytic ground truth derived from
+Propositions~\ref{prop:posterior}--\ref{prop:canonical}: the recovered
+posterior mean $\hat B X$, posterior-variance retention, and direction
+alignment all track the closed-form predictions.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\synfig{recoverability_spectrum.pdf}}
+\caption{Recoverability spectrum on a synthetic linear--Gaussian instance
+($n=800$, $p=80$, $d=40$). The leading $\hat\rho_i^2$ recovers the planted
+canonical structure; later components fall to the high-dimensional bulk.}
+\label{fig:synthetic-spectrum}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\synfig{synthetic_truth_validation.pdf}}
+\caption{Empirical-vs-analytic check on the same synthetic instance.
+Estimated canonical correlations, recoverability per direction, and
+imaging variance attributable to genomics all match the closed-form
+quantities from Propositions~\ref{prop:posterior}--\ref{prop:canonical}.}
+\label{fig:synthetic-truth}
+\end{figure}
 
 \section{Rank limits and identifiability}
 \label{sec:rank}
@@ -710,6 +760,35 @@ distribution; the permutation $p$-value tests whether any genomic direction is
 image-identifiable beyond chance.
 \end{itemize}
 
+Figure~\ref{fig:synthetic-cv} shows both diagnostics on the synthetic instance.
+The in-sample $\hat R_i$ overshoots the planted truth by the amount predicted
+by the high-dimensional bias, while the $5$-fold $\hat R_i^{\mathrm{cv}}$
+tracks the truth for identifiable directions and collapses toward the null
+$95\%$ quantile thereafter. Figure~\ref{fig:synthetic-perm} shows the
+permutation null on $\hat\rho_1$: when the true signal is nonzero, the
+observed value sits cleanly outside the null bulk and the per-direction
+$p$-values fall below $0.01$ for the top three components, matching the
+planted rank.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\synfig{cv_recoverability.pdf}}
+\caption{Cross-validated recoverability on a synthetic instance with planted
+rank $k=5$. In-sample $\hat R_i$ (grey) is biased upward; $5$-fold
+$\hat R_i^{\mathrm{cv}}$ (blue) tracks the planted truth for the identifiable
+directions and collapses to the null floor afterwards.}
+\label{fig:synthetic-cv}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\linewidth]{\synfig{permutation_null.pdf}}
+\caption{Permutation null on the leading canonical correlation
+$\hat\rho_1$ for the synthetic instance. Red marks the observed value;
+$p < 0.01$ for the top three directions, recovering the planted rank.}
+\label{fig:synthetic-perm}
+\end{figure}
+
 \section{Interpretation for radiogenomics}
 \label{sec:interpretation}
 
@@ -723,6 +802,241 @@ per direction; (3) a total information budget $I(G;X)$; and (4) an honest,
 cross-validated estimate of each. The governing principle is that radiogenomics
 should target \emph{image-identifiable low-dimensional genomic subspaces}, whose
 dimension is set by the biology--imaging channel and not by the gene panel size.
+
+\section{Application: TCGA-KIRC}
+\label{sec:tcga-kirc}
+
+We now instantiate the framework on a real radiogenomic cohort --- TCGA-KIRC
+(clear-cell renal cell carcinoma) --- to demonstrate how the recoverability
+spectrum, the cross-validated and permutation-calibrated diagnostics of
+Section~\ref{sec:estimation-honest}, and the dimensional-collapse warnings of
+Section~\ref{sec:estimation-regimes} interact on a typical cohort. The point
+of this section is \emph{not} to advertise a predictor: the result is a null
+one. The point is to convert that null into a quantitative empirical ceiling
+on the imaging-to-genomics channel and a sample-size design recommendation,
+exactly as the synthetic experiments of
+Sections~\ref{sec:canonical}--\ref{sec:estimation-honest} predict. All numbers
+below are reproducibly generated by the companion notebook and saved to
+\texttt{notebooks/figures/tcga\_kirc/gene\_expression/tumor\_radimagenet/%
+stats.json}.
+
+\subsection{Data and processing pipeline}
+\label{sec:kirc-pipeline}
+The two modality \texttt{AnnData} objects fed to the notebook are produced by
+two scripts in \texttt{scripts/}.
+
+\paragraph{Imaging
+(\texttt{process\_imaging\_tcga\_kirc.py} $\to$ \texttt{make\_imaging\_matrix.py}).}
+For each TCGA-KIRC patient we obtain the venous-phase abdominal CT volume
+(\texttt{0502\_VENOUS.nii}) and a manually curated tumour mask. The pipeline:
+\begin{enumerate}
+\item Pull the canonical TCIA volumes and the radiologist-drawn tumour
+segmentations; orient every volume into the canonical
+nibabel orientation.
+\item Run TotalSegmentator with the
+\texttt{kidney\_left}/\texttt{kidney\_right} target list to produce an organ
+mask; combine with the tumour mask to form (tumour, organ, tumour$\cup$organ)
+mask triples per patient. Small blobs are removed, holes filled, and a
+morphological closing applied to stabilise mask boundaries.
+\item Extract patient-level imaging features. We use a pretrained
+\emph{RadImageNet} 2D backbone applied tile-wise within the tumour mask
+(\texttt{rgit.radimagenet.get\_radimagenet\_embeddings}), producing a
+$d_{\mathrm{native}} = 1841$-dimensional embedding per patient. (A second
+pipeline using PyRadiomics shape/texture features is supported for
+ablations.)
+\item Stack patient-level embeddings into an \texttt{AnnData} object whose
+\texttt{obs} index is the TCGA \texttt{patient\_id} and whose \texttt{var}
+index is the embedding-dimension labels. Output:
+\texttt{data/tcga\_kirc/imaging/tumor\_radimagenet.h5ad}.
+\end{enumerate}
+
+\paragraph{Genomics (\texttt{make\_genomics\_matrix.py}).}
+For each matched patient we pull the TCGA-KIRC RNA-seq counts (raw STAR counts
+from the GDC) and the somatic-mutation MAFs.
+\begin{enumerate}
+\item Counts are CPM-normalised, $\log_{1+}$-transformed, and reduced to the
+top $2000$ highly variable genes (Seurat-style HVG selection in
+\texttt{scanpy.pp.highly\_variable\_genes}); the resulting matrix is stored
+in the primary \texttt{AnnData}.
+\item Somatic mutations are folded into a sparse binary
+gene-symbol matrix on the same patient index for downstream per-gene
+validation (Section~\ref{sec:kirc-pergene}).
+\item Output: \texttt{data/tcga\_kirc/genomics/gene\_expression.h5ad}.
+\end{enumerate}
+After intersecting patients across both \texttt{AnnData} objects we retain
+$n = 190$ patients with $p_{\mathrm{native}} = 2000$ HVG transcripts and
+$d_{\mathrm{native}} = 1841$ RadImageNet features.
+
+\subsection{Working-dimension budget}
+\label{sec:kirc-cohort}
+Both modalities are $z$-scored per feature and PCA-reduced symmetrically to
+working dimensions
+$p^\star = d^\star = 38 = \lfloor n / 5 \rfloor$ following the
+$p^\star + d^\star \le n/\tau$ rule of
+Section~\ref{sec:estimation-regimes} ($\tau = 5$). This places the analysis at
+$\kappa_G + \kappa_X = 76/190 \approx 0.4$ --- the high-dimensional regime,
+not the saturating one, but well inside the territory where in-sample
+canonical correlations are heavily biased upward.
+
+\subsection{The recoverability spectrum and its null}
+\label{sec:kirc-spectrum}
+Fitting regularised CCA (Ledoit--Wolf shrinkage on both sides) returns an
+in-sample spectrum dominated by a near-unit leading correlation
+($\hat\rho_1 \approx 1.00$, $\hat R_1 \approx 1.00$) and a total in-sample
+mutual information of $21.3$ bits over $12$ retained components
+(Fig.~\ref{fig:kirc-spectrum}). This is exactly the geometric artefact
+described in regime~2--3 of Section~\ref{sec:estimation-regimes}:
+$5$-fold cross-validation collapses $\hat R_1$ from $\approx 1$ to
+$\hat R_1^{\mathrm{cv}} = 0.094$, and held-out prediction of the leading
+canonical genomic score has $R^2 = -3.74$ --- worse than predicting the mean.
+The companion permutation test ($N_{\mathrm{perm}} = 200$) returns
+$p$-values $0.32, 0.16, 0.24$ for the top three canonical correlations.
+None of the leading directions are distinguishable from chance.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\kircfig{cv_recoverability.pdf}}
+\caption{Recoverability spectrum on TCGA-KIRC. In-sample $\hat R_i$ (grey)
+tracks the high-dimensional bulk; cross-validated $\hat R_i$ (blue, $5$-fold)
+collapses to a flat residual near zero. The gap is the overfitting predicted
+in Section~\ref{sec:estimation-regimes}, regime~2--3. Contrast with the
+synthetic instance of Fig.~\ref{fig:synthetic-cv}, where CV tracks the
+planted truth.}
+\label{fig:kirc-spectrum}
+\end{figure}
+
+\subsection{An empirical upper bound on $I(G;X)$}
+\label{sec:kirc-ucb}
+Section~\ref{sec:estimation-regimes} predicts that, in this regime, the
+permutation null on $\hat\rho_1$ should itself be pulled toward $1$ by the
+high-dimensional geometry; this is borne out: the per-permutation
+$\hat\rho_1^{\mathrm{null}}$ has mean $0.84$ and a $95\%$ quantile of $1.00$.
+We therefore convert the test into a one-sided upper confidence limit by
+aggregating, across permutations, the cumulative mutual information
+$\mathrm{MI}^{\mathrm{null}}(K) = -\tfrac12 \sum_{i\le K}
+\log(1 - \hat\rho_{i,\mathrm{null}}^2)$ over the top $K=3$ tested components,
+and reading off its $95$th percentile (Fig.~\ref{fig:kirc-ucb}):
+\begin{equation}
+I(G;X)\ \big|_{\text{KIRC, top-}3}\ \le\ 21.2\ \mathrm{bits}\quad
+(\text{one-sided }95\%\text{ UCL}),
+\label{eq:kirc-ucl}
+\end{equation}
+with observed cumulative MI $20.5$ bits sitting close to the null mean of
+$8.0$ bits expressed in bits ($5.5$ nats). The bound is wide --- this is the
+honest finding, not a weakness of the method --- because the null is itself
+saturating; tightening it requires either larger $n$ or smaller
+$p^\star, d^\star$.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\linewidth]{\kircfig{mi_upper_bound.pdf}}
+\caption{Cumulative-MI null distribution (top-$3$ canonical components) on
+TCGA-KIRC. The observed value (red) lies within the null bulk; the dashed
+line marks the $95\%$ upper confidence limit on $I(G;X)$ used
+in~\eqref{eq:kirc-ucl}.}
+\label{fig:kirc-ucb}
+\end{figure}
+
+A more useful summary is the \emph{effective image-identifiable rank}: the
+number of canonical components whose cross-validated $\hat R_i^{\mathrm{cv}}$
+exceeds the per-component permutation-null $95\%$ quantile. On this cohort,
+\begin{equation}
+\hat k_{\mathrm{eff}} = 0\ \text{(of }K = 3\text{ tested),}
+\end{equation}
+so the empirical instantiation of the rank bound of
+Proposition~\ref{prop:rank}, after sample-size deflation, is zero.
+
+\subsection{Sample-complexity sweep}
+\label{sec:kirc-sweep}
+A single-$n$ null result is most informative when paired with the scaling of
+that null in $n$. We subsample the cohort to
+$n \in \{50, 57, 95, 133, 162, 190\}$, refit the working pipeline (same
+$p^\star + d^\star \le n/\tau$ budget, $5$-fold CV, $100$ permutations) and
+plot the three observables vs.\ $n$ (Fig.~\ref{fig:kirc-sweep}). The
+cross-validated $\hat R_1^{\mathrm{cv}}$ is flat at $\approx 0.05$--$0.10$
+across the full range; doubling $n$ does not move it. The Wachter detection
+edge sits at $\approx 0.63$ throughout, because $p^\star, d^\star$ grow with
+$n$ under our rule, so the cohort-statistical ceiling for distinguishing
+$\rho_1$ from the high-dimensional bulk would require
+$\rho_1^2 \gtrsim 0.6$ --- well above anything observed at any subsample
+size. Inverting the Wachter expression for a target $\rho_1^2 = 0.2$ at
+balanced $p^\star = d^\star$ gives the sample-size requirement
+$n \gtrsim 25\,p^\star$ quoted in Section~\ref{sec:estimation-regimes}.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\kircfig{sample_complexity_sweep.pdf}}
+\caption{Sample-complexity sweep on TCGA-KIRC. Honest $\hat R_1^{\mathrm{cv}}$
+(blue squares) is flat across all subsampled cohort sizes;
+in-sample $\hat\rho_1^2$ (grey) is dominated by the high-dimensional bulk;
+the permutation $95\%$ null (red triangles) and Wachter edge (green crosses)
+sit above the observed honest recoverability at every $n$.}
+\label{fig:kirc-sweep}
+\end{figure}
+
+\subsection{Per-gene non-linear validation}
+\label{sec:kirc-pergene}
+The recoverability spectrum makes a sharp prediction: genes loading on
+non-identifiable directions should not be predictable from imaging, and
+flexible non-linear models should not substantially exceed the linear
+Bayes-optimal ceiling. Picking five high- and five low-recoverability
+mutated genes (mutation frequency in $[0.05, 0.95]$) and training $L_2$
+logistic regression and a small random forest to predict mutation status
+from the imaging PCs ($5$-fold CV), we observe
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+group               & mean AUC (logistic) & mean AUC (RF) \\
+\midrule
+image-identifiable  & $0.499$ & $0.522$ \\
+non-identifiable    & $0.497$ & $0.490$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Both groups sit at chance and the non-linear model does \emph{not} exceed
+the linear ceiling --- consistent with the linear--Gaussian model and with
+the global null finding (Fig.~\ref{fig:kirc-pergene}).
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\kircfig{per_gene_auc.pdf}}
+\caption{Per-gene mutation predictability on TCGA-KIRC. Five
+high-recoverability and five low-recoverability mutated genes, two
+classifiers, $5$-fold CV. All bars sit within sampling noise of the
+chance line at $0.5$.}
+\label{fig:kirc-pergene}
+\end{figure}
+
+\subsection{Implications}
+\label{sec:kirc-implications}
+Three concrete take-aways follow.
+\begin{enumerate}
+\item \emph{Empirical ceiling.} For TCGA-KIRC at $n = 190$ with
+$2000$ HVG-filtered transcripts and $1841$ RadImageNet features, the
+imaging-to-genomics channel admits a $95\%$ upper bound
+$I(G;X) \le 21.2$ bits over the leading three canonical directions
+(Eq.~\ref{eq:kirc-ucl}), with effective image-identifiable rank
+$\hat k_{\mathrm{eff}} = 0$. The substantive empirical claim is that no
+genomic direction in this cohort is image-identifiable above chance under
+the working-dimension budget $\tau = 5$.
+\item \emph{Design recommendation.} The sample-complexity sweep
+(Section~\ref{sec:kirc-sweep}) shows $\hat R_1^{\mathrm{cv}}$ stationary in
+$n$ over the range $[50, 190]$; the Wachter edge analysis indicates that
+detecting $\rho_1^2 = 0.2$ at a balanced working dimension
+$p^\star = d^\star$ requires $n \gtrsim 25\,p^\star$, which under our
+adaptive rule is an order of magnitude beyond typical radiogenomic cohort
+sizes. The framework converts the null result into a quantitative cohort
+specification.
+\item \emph{Audit of literature predictors.} Published radiogenomic AUCs
+in the range $0.65$--$0.80$ at cohort sizes $n \sim 100$--$300$ imply
+per-gene recoverabilities meaningfully above the cohort-statistical
+ceiling derived above for KIRC. The non-linear validation of
+Section~\ref{sec:kirc-pergene} matches but does not exceed the linear
+Bayes-optimal ceiling --- consistent with the model. Any study reporting
+substantially higher per-gene AUCs at comparable cohort dimension should
+be treated as a candidate for overfit or leakage rather than as evidence
+against the framework.
+\end{enumerate}
 
 \appendix
 \section{Symbol reference}

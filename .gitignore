@@ -166,6 +166,6 @@ outputs
 outputs/
 tmp.*
 tmp2.*
-manuscript/*
-!manuscript/main.tex
-!manuscript/main.pdf
+main.*
+!main.tex
+!main.pdf

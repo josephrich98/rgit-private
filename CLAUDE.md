@@ -9,7 +9,7 @@ This is a statistical analysis research repository investigating information-the
 ## Repository Layout
 
 - `rgit/` — core Python package; estimation utilities and statistical methods go here
-- `notebooks/` — exploratory analysis and figure generation (Jupyter)
+- `notebooks/` — exploratory analysis and figure generation (Jupyter), including `notebooks/figures/` for generated images
 - `scripts/` — batch/CLI scripts for large-scale runs
 - `data/` — datasets (not committed to git)
 - `main.tex` — primary technical manuscript

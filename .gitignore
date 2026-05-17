@@ -168,3 +168,5 @@ tmp.*
 tmp2.*
 main.aux
 main.out
+main.fls
+main.fdb_latexmk

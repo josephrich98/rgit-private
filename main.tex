@@ -8,7 +8,7 @@
 \usepackage[colorlinks=true, linkcolor=lightgray, citecolor=lightgray]{hyperref}
 \usepackage{graphicx}
 \usepackage{booktabs}
-\newcommand{\synfig}[1]{notebooks/figures/synthetic/genomics_synthetic/imaging_synthetic/#1}
+\newcommand{\synfig}[1]{notebooks/figures/synthetic/gene_expression_synthetic/imaging_synthetic/#1}
 \newcommand{\kircfig}[1]{notebooks/figures/tcga_kirc/gene_expression/tumor_radimagenet/#1}
 
 \pagecolor[rgb]{0.05,0.05,0.05} %black - background color
@@ -34,8 +34,13 @@
 
 \title{Image-Identifiable Genomic Subspaces:\\
 A Linear--Gaussian Model of Radiogenomic Recoverability}
-\author{Radiogenomic Information-Theoretic Bounds Project}
-\date{\today}
+\author{
+Joseph Rich$^{1,3}$\\[0.5em] \qquad Lior Pachter$^{1,2}$\thanks{Address correspondence to lpachter@caltech.edu.}
+\small $^1$Division of Biology and Biological Engineering, California Institute of Technology\\
+\small $^2$Department of Computing and Mathematical Sciences, California Institute of Technology\\
+\small $^3$Keck School of Medicine, University of Southern California
+}
+\date{}
 
 \begin{document}
 \maketitle
@@ -745,6 +750,25 @@ whose effective $p^\star + d^\star$ is a small fraction of $n$, with both
 sides reduced symmetrically and every reported number a cross-validated or
 permutation-calibrated one.
 
+Figure~\ref{fig:synthetic-sweep} illustrates these regimes on the synthetic
+instance, where the planted truth is known. As $n$ grows with $p^\star, d^\star$
+scaled to keep $\kappa_G + \kappa_X$ bounded, the in-sample $\hat\rho_1$ sits at
+or near $1$ across the small-$n$ saturating regime --- indistinguishable from
+the permutation null --- while the cross-validated $\hat R_1^{\mathrm{cv}}$ only
+separates from zero once $n$ clears the Wachter edge. The empirical mutual
+information shows the same threshold behaviour.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\synfig{sample_complexity_sweep.pdf}}
+\caption{Sample-complexity sweep on the synthetic instance with known truth.
+In-sample $\hat\rho_1$ tracks the null until $n$ exceeds the Wachter edge;
+cross-validated $\hat R_1^{\mathrm{cv}}$ and empirical $\hat I(G;X)$ only
+become informative past that threshold. Compare to
+Figure~\ref{fig:kirc-sweep} for the same diagnostic on TCGA-KIRC.}
+\label{fig:synthetic-sweep}
+\end{figure}
+
 \subsection{Honest recoverability: cross-validation and permutation}
 \label{sec:estimation-honest}
 In-sample canonical correlations are biased upward, severely so when $p, d$ are
@@ -787,6 +811,27 @@ directions and collapses to the null floor afterwards.}
 $\hat\rho_1$ for the synthetic instance. Red marks the observed value;
 $p < 0.01$ for the top three directions, recovering the planted rank.}
 \label{fig:synthetic-perm}
+\end{figure}
+
+The same optimism appears in the aggregate fraction of imaging variance
+attributable to genomics. Figure~\ref{fig:synthetic-vardecomp} shows the
+in-sample share $\sum_i \hat R_i / \min(p^\star, d^\star)$ alongside its
+cross-validated counterpart on the synthetic instance: the in-sample number
+sits well above the planted truth while the CV value tracks it. The same
+diagnostic on TCGA-KIRC (Section~\ref{sec:kirc}) reports
+$0.193$ in-sample against $0.012$ cross-validated --- a sixteen-fold gap that
+is consistent with the synthetic mechanism rather than with any genuinely
+recoverable signal.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\linewidth]{\synfig{imaging_variance_decomposition.pdf}}
+\caption{Share of imaging variance attributable to genomics on the synthetic
+instance: in-sample (grey) versus $5$-fold cross-validated (blue), with the
+planted truth marked. The in-sample share is biased upward by the
+high-dimensional inflation described in
+Section~\ref{sec:estimation-regimes}.}
+\label{fig:synthetic-vardecomp}
 \end{figure}
 
 \section{Interpretation for radiogenomics}
@@ -964,6 +1009,7 @@ per-gene mutation validation (Section~\ref{sec:kirc-pergene}) can be unified
 into a single coherent recoverability calculation.
 
 \section{Application: TCGA-KIRC}
+\label{sec:kirc}
 \label{sec:tcga-kirc}
 
 We now instantiate the framework on a real radiogenomic cohort --- TCGA-KIRC

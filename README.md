@@ -66,12 +66,12 @@ python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/tumor_radimagene
 
 #### Genomics data processing
 wget -O data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz https://api.gdc.cancer.gov/data/1c8cfe5f-e52d-41ba-94da-f15ea1337efc
-python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_genes.h5ad --feature gene_symbol --patient_ids data/tcga_kirc/imaging/metadata.csv data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz
-python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_pathways.h5ad --feature pathway --patient_ids data/tcga_kirc/imaging/metadata.csv data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz
+python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_genes.h5ad --dataset tcga --feature gene_symbol --patient_ids data/tcga_kirc/imaging/metadata.csv data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz
+python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_pathways.h5ad --dataset tcga --feature pathway --patient_ids data/tcga_kirc/imaging/metadata.csv data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz
 
 gdc-client download -m data/tcga_kirc/genomics/gene_expression_manifest.txt -d data/tcga_kirc/genomics
 tar -xzvf data/tcga_kirc/genomics/gene_expression.tar.gz -C data/tcga_kirc/genomics/gene_expression
-python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/gene_expression.h5ad --feature gene_expression --patient_ids data/tcga_kirc/imaging/metadata.csv --filename_to_patientid data/tcga_kirc/genomics/gene_expression_filename_to_patientid.csv data/tcga_kirc/genomics/gene_expression
+python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/gene_expression.h5ad --dataset tcga --feature gene_expression --patient_ids data/tcga_kirc/imaging/metadata.csv --filename_to_patientid data/tcga_kirc/genomics/gene_expression_filename_to_patientid.csv data/tcga_kirc/genomics/gene_expression
 
 #### Run notebooks
 for genomics_h5ad in data/tcga_kirc/genomics/*.h5ad; do
@@ -88,8 +88,11 @@ wget -O data/nsclc/imaging/metadata.xlsx https://www.cancerimagingarchive.net/wp
 wget -O data/nsclc/genomics/gene_expression.txt.gz https://ftp.ncbi.nlm.nih.gov/geo/series/GSE103nnn/GSE103584/suppl/GSE103584%5FR01%5FNSCLC%5FRNAseq%2Etxt%2Egz
 nbia-data-retriever --cli /home/jrich/Desktop/rgit/data/nsclc/imaging/manifest.tcia -d /home/jrich/Desktop/rgit/data/nsclc/imaging/dicom -v -f
 python scripts/make_imaging_matrix.py -o data/nsclc/imaging/organ_radiomics.h5ad -m data/nsclc/imaging/metadata.csv --mask_col organ_mask --embedder pyradiomics --label 1
-python scripts/make_imaging_matrix.py -o data/nsclc/imaging/organ_radimagenet.h5ad -m data/nsclc/imaging/metadata.csv --mask_col organ_mask --embedder radimagenet --model_path data/models/RadImageNet_pytorch/ResNet50.pt --clip_min -1000 --clip_max 400 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 185,185,75
-python scripts/make_genomics_matrix.py -o data/nsclc/genomics/gene_expression.h5ad --feature gene_expression data/nsclc/genomics/gene_expression.txt.gz
+python scripts/make_genomics_matrix.py -o data/nsclc/genomics/gene_expression.h5ad --dataset nsclc --feature gene_expression data/nsclc/genomics/gene_expression.txt.gz
+
+### ADNI
+python scripts/process_imaging_adni.py
+python scripts/make_genomics_matrix.py -o data/adni/genomics/gene_expression.h5ad --dataset adni --feature gene_expression /home/jrich/Desktop/rgit/data/adni/genomics/ADNI_Gene_Expression_Profile.csv
 
 
 ## Status

@@ -24,6 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.special import ndtri as _ndtri
 
 __all__ = [
     "RecoverabilityFit",
@@ -347,6 +348,8 @@ def make_synthetic_radiogenomics(
     noise_g: float = 1.0,
     noise_x: float = 1.0,
     random_state: int = 0,
+    genomics_type: str = "gaussian",
+    mutation_freq=None,
 ):
     """Draw a synthetic radiogenomic dataset from the probabilistic-CCA model.
 
@@ -354,6 +357,14 @@ def make_synthetic_radiogenomics(
     exactly ``k`` canonical correlations are nonzero and the ground-truth
     recoverability spectrum is computable in closed form via
     :func:`true_recoverability`.
+
+    When ``genomics_type='bernoulli'`` the continuous genomic readout is passed
+    through a per-gene probit threshold to produce a binary mutation matrix,
+    realising the Gaussian-copula Bernoulli model of the manuscript section
+    'A Bernoulli extension for mutation data via a Gaussian copula'. The
+    returned ``Sg`` is the *latent* covariance Sigma_Z, so
+    :func:`true_recoverability` continues to return the DPI upper bound
+    ``I(G;X) <= I(Z;X)``.
 
     Parameters
     ----------
@@ -367,13 +378,27 @@ def make_synthetic_radiogenomics(
     noise_g, noise_x : float
         Scale of the modality-private noise.
     random_state : int
+    genomics_type : {"gaussian", "bernoulli"}
+        ``"gaussian"`` (default) returns the continuous probabilistic-CCA draw.
+        ``"bernoulli"`` thresholds each genomic column to a binary mutation
+        indicator under the multivariate-probit model.
+    mutation_freq : float, (p,) array-like, or None
+        Used only when ``genomics_type='bernoulli'``. Target marginal mutation
+        frequencies ``p_j = P(G_j = 1)``. A scalar applies to every gene; an
+        array sets per-gene frequencies. If ``None``, draws p_j ~ Uniform(0.1,
+        0.5) so the binarization gap is moderate.
 
     Returns
     -------
     G : (n, p) array
+        Continuous when ``genomics_type='gaussian'``; binary {0, 1} when
+        ``genomics_type='bernoulli'``.
     X : (n, d) array
     truth : dict
         Generative parameters plus the implied covariances ``Sg, Sx, Sgx``.
+        For ``genomics_type='bernoulli'`` ``Sg`` is the *latent* covariance and
+        the additional keys ``G_latent, mutation_freq, tau`` carry the
+        pre-threshold matrix, per-gene marginal frequencies, and thresholds.
     """
     rng = np.random.default_rng(random_state)
     if shared_signal is None:
@@ -390,9 +415,10 @@ def make_synthetic_radiogenomics(
     Psi_g = noise_g * (0.5 + rng.random(p))  # anisotropic modality-private noise
     Psi_x = noise_x * (0.5 + rng.random(d))
 
-    G = Z @ Wg.T + rng.standard_normal((n, p)) * np.sqrt(Psi_g)
+    G_cont = Z @ Wg.T + rng.standard_normal((n, p)) * np.sqrt(Psi_g)
     X = Z @ Wx.T + rng.standard_normal((n, d)) * np.sqrt(Psi_x)
 
+    Sg_latent = Wg @ Wg.T + np.diag(Psi_g)
     truth = {
         "k": k,
         "Z": Z,
@@ -401,10 +427,39 @@ def make_synthetic_radiogenomics(
         "Psi_g": Psi_g,
         "Psi_x": Psi_x,
         "shared_signal": shared_signal,
-        "Sg": Wg @ Wg.T + np.diag(Psi_g),
+        "Sg": Sg_latent,
         "Sx": Wx @ Wx.T + np.diag(Psi_x),
         "Sgx": Wg @ Wx.T,
+        "genomics_type": genomics_type,
     }
+
+    if genomics_type == "gaussian":
+        return G_cont, X, truth
+
+    if genomics_type != "bernoulli":
+        raise ValueError(
+            f"genomics_type must be 'gaussian' or 'bernoulli', got {genomics_type!r}"
+        )
+
+    # Probit binarization. G_cont has zero mean (Z and noise are centered);
+    # threshold against its per-gene standard deviation so the marginal target
+    # p_j is achieved (in expectation under Gaussianity of G_cont, which holds
+    # exactly here).
+    if mutation_freq is None:
+        p_j = rng.uniform(0.1, 0.5, size=p)
+    else:
+        p_j = np.broadcast_to(np.asarray(mutation_freq, dtype=float), (p,)).copy()
+    p_j = np.clip(p_j, 1.0 / max(n, 4), 1.0 - 1.0 / max(n, 4))
+    sd_g = np.sqrt(np.diag(Sg_latent))
+    # threshold on the standardized latent: G_j = 1 iff G_cont_j / sd_g_j > tau_j
+    tau_unit = _ndtri(1.0 - p_j)
+    tau_raw  = tau_unit * sd_g
+    G = (G_cont > tau_raw[None, :]).astype(np.float64)
+
+    truth["G_latent"] = G_cont
+    truth["mutation_freq"] = p_j
+    truth["tau"] = tau_unit  # threshold on the unit-variance latent scale
+
     return G, X, truth
 
 

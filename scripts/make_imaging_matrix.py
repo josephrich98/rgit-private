@@ -112,6 +112,7 @@ def parse_args():
     parser.add_argument("--device", default="cpu", help="[radimagenet] Torch device (cpu, cuda, mps)")
     parser.add_argument("--extra_meta_cols", nargs="*", default=[], help="Additional metadata columns from the metadata file to store in adata.obs")
     parser.add_argument("--mask_col", default=None, help="Column name in metadata containing mask paths")
+    parser.add_argument("--orient", action="store_true", help="Whether to reorient images to canonical orientation (RAS) using SimpleITK before embedding")
     parser.add_argument("--clip_min", type=float, default=None, help="Minimum intensity value to clip to (pyradiomics)")
     parser.add_argument("--clip_max", type=float, default=None, help="Maximum intensity value to clip to (pyradiomics)")
     parser.add_argument("--resample_spacing", type=str, default=None, help="Target spacing for resampling (mm), e.g. '1.0,1.0,1.0'")
@@ -170,6 +171,11 @@ def main():
             mask_file = None
         mask_file = str(mask_file) if mask_file else None
 
+        if args.orient:
+            image_file = utils.set_canonical_orientation(image_file, out=True)
+            if mask_file is not None:
+                mask_file = utils.set_canonical_orientation(mask_file, out=True)
+        
         if args.clip_min is not None or args.clip_max is not None:
             image_file = utils.clip_intensity_range(image_file, clip_min=args.clip_min, clip_max=args.clip_max, out=True)
 

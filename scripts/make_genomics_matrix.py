@@ -166,33 +166,36 @@ def load_filename_to_patientid(path: str) -> dict[str, str]:
     return dict(zip(df["file_name"], df[id_col]))
 
 
-def _read_expression_tsv(fileobj, value_col: str) -> pd.Series:
-    """Return a Series gene_id → expression value, skipping summary rows."""
+_EXPRESSION_COLS = ["tpm_unstranded", "fpkm_unstranded", "fpkm_uq_unstranded", "unstranded"]
+
+
+def _read_expression_tsv(fileobj) -> tuple[pd.DataFrame, pd.Series]:
+    """Return (expr_df, gene_name_series) indexed by gene_id, skipping summary rows."""
     df = pd.read_csv(fileobj, sep="\t", comment="#")
     df = df[df["gene_name"].notna()]  # drop N_unmapped etc.
-    df = df.set_index("gene_id")[value_col]
-    return df
+    df = df.set_index("gene_id")
+    return df[_EXPRESSION_COLS], df["gene_name"]
 
 
 def build_gene_expression_matrix(
     inputs: list[str],
     filename_to_patientid: dict[str, str],
-    value_col: str = "tpm_unstranded",
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
     """
-    Build a patient × gene expression DataFrame from tar.gz or directory inputs.
+    Build patient × gene expression DataFrames from tar.gz or directory inputs.
 
-    Returns (expr_df, var_meta_df) where expr_df has patient_id as index and
-    gene_id as columns, and var_meta_df has gene_name indexed by gene_id.
+    Returns (layers, var_meta_df) where layers is a dict keyed by expression
+    column name (e.g. 'tpm_unstranded') and var_meta_df has gene_name indexed
+    by gene_id.
     """
-    series_list: list[pd.Series] = []
+    frames: list[pd.DataFrame] = []
     patient_ids: list[str] = []
-    var_meta: dict[str, str] = {}  # gene_id → gene_name
+    gene_names: pd.Series | None = None
 
     for inp in inputs:
         p = Path(inp)
-        if p.is_file() and tarfile.is_tarfile(inp):
-            with tarfile.open(inp, "r:gz") as tf:
+        if p.is_file() and p.name.endswith((".tar.gz", ".tgz", ".tar")):
+            with tarfile.open(inp) as tf:
                 members = [m for m in tf.getmembers() if m.name.endswith(".tsv")]
                 for member in tqdm(members, desc=f"Reading {p.name}"):
                     fname = Path(member.name).name
@@ -200,53 +203,45 @@ def build_gene_expression_matrix(
                     if patient_id is None:
                         logger.warning(f"No patient_id mapping for {fname}, skipping")
                         continue
-                    fobj = tf.extractfile(member)
-                    s = _read_expression_tsv(fobj, value_col)
-                    series_list.append(s)
+                    expr, gnames = _read_expression_tsv(tf.extractfile(member))
+                    frames.append(expr)
                     patient_ids.append(patient_id)
+                    if gene_names is None:
+                        gene_names = gnames
         elif p.is_dir():
-            tsv_files = sorted(p.rglob("*.tsv"))
-            for tsv_path in tqdm(tsv_files, desc=f"Reading {p.name}"):
+            for tsv_path in tqdm(sorted(p.rglob("*.tsv")), desc=f"Reading {p.name}"):
                 fname = tsv_path.name
                 patient_id = filename_to_patientid.get(fname)
                 if patient_id is None:
                     logger.warning(f"No patient_id mapping for {fname}, skipping")
                     continue
                 with open(tsv_path) as fobj:
-                    s = _read_expression_tsv(fobj, value_col)
-                series_list.append(s)
+                    expr, gnames = _read_expression_tsv(fobj)
+                frames.append(expr)
                 patient_ids.append(patient_id)
+                if gene_names is None:
+                    gene_names = gnames
         else:
             raise ValueError(f"gene_expression input must be a .tar.gz or a directory: {inp}")
 
-    if not series_list:
+    if not frames:
         raise RuntimeError("No gene expression files were loaded.")
 
-    # build var metadata (gene_name) from first sample
-    inp0 = inputs[0]
-    if p.is_file() and tarfile.is_tarfile(inp0):
-        with tarfile.open(inp0, "r:gz") as tf:
-            first = next(m for m in tf.getmembers() if m.name.endswith(".tsv"))
-            fobj = tf.extractfile(first)
-            tmp = pd.read_csv(fobj, sep="\t", comment="#")
-            tmp = tmp[tmp["gene_name"].notna()].set_index("gene_id")
-            for gid, row in tmp.iterrows():
-                var_meta[gid] = row["gene_name"]
-    else:
-        first_tsv = next(Path(inp0).rglob("*.tsv"))
-        tmp = pd.read_csv(first_tsv, sep="\t", comment="#")
-        tmp = tmp[tmp["gene_name"].notna()].set_index("gene_id")
-        for gid, row in tmp.iterrows():
-            var_meta[gid] = row["gene_name"]
+    gene_ids = frames[0].index
+    idx = pd.Index(patient_ids, name="patient_id")
+    layers = {
+        col: pd.DataFrame(
+            [f[col].values for f in frames],
+            index=idx,
+            columns=gene_ids,
+        )
+        for col in _EXPRESSION_COLS
+    }
 
-    expr_df = pd.DataFrame(series_list, index=patient_ids)
-    expr_df.index.name = "patient_id"
+    var_meta_df = pd.DataFrame({"gene_name": gene_names}, index=gene_ids)
 
-    var_meta_df = pd.DataFrame({"gene_name": var_meta}, index=pd.Index(list(var_meta.keys()), name="gene_id"))
-    var_meta_df = var_meta_df.reindex(expr_df.columns)
-
-    logger.info(f"Gene expression matrix: {expr_df.shape[0]} patients × {expr_df.shape[1]} genes")
-    return expr_df, var_meta_df
+    logger.info(f"Gene expression: {len(patient_ids)} patients × {len(gene_ids)} genes, {len(_EXPRESSION_COLS)} layers")
+    return layers, var_meta_df
 
 
 # ---------------------------------------------------------------------------
@@ -255,20 +250,11 @@ def build_gene_expression_matrix(
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Build patient × genomic-feature AnnData from MAF file(s)")
-    parser.add_argument("inputs", nargs="+", help="One or more MAF files (.maf or .maf.gz) or directories with structure dir/filename/file.ext")
+    parser.add_argument("inputs", nargs="+", help="One or more MAF files (.maf or .maf.gz) or directories with structure dir/filename/file.ext or text matrix file")
     parser.add_argument("-o", "--out", required=True, help="Output .h5ad path")
     parser.add_argument(
         "--feature", choices=["variant_id", "gene_symbol", "pathway", "gene_expression"], default="gene_symbol",
         help="Feature granularity for the var axis"
-    )
-    parser.add_argument(
-        "--expression_value", default="tpm_unstranded",
-        choices=["tpm_unstranded", "fpkm_unstranded", "fpkm_uq_unstranded", "unstranded"],
-        help="[gene_expression mode] Which count/expression column to use (default: tpm_unstranded)"
-    )
-    parser.add_argument(
-        "--gene_expression_bins", type=int, default=None, metavar="N",
-        help="[gene_expression mode] Bin each gene's expression into N uniform quantile buckets (e.g. 2=halves, 3=thirds). Default: no binning."
     )
     parser.add_argument("--patient_ids", default=None, help="CSV/parquet with column 'patient_id' to restrict output")
     parser.add_argument("--filename_to_patientid", default=None, help="Path to CSV if input files are organized as dir/filename/file.ext and patient_id is derived from filename (one column 'filename' with relative path from input dir, one column 'patient_id')")
@@ -298,6 +284,32 @@ def main():
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # -----------------------------------------------------------------------
+    # NSCLC txt matrix
+    # -----------------------------------------------------------------------
+    if len(args.inputs) == 1 and Path(args.inputs[0]).is_file() and args.inputs[0].endswith((".txt", ".txt.gz")):
+        path = args.inputs[0]
+
+        # load expression matrix
+        df = pd.read_csv(
+            path,
+            sep="\t",
+            index_col=0,
+            compression="gzip" if path.endswith(".gz") else None,
+        )
+
+        adata = ad.AnnData(
+            X=df.T.values,
+            obs=pd.DataFrame(index=df.columns),
+            var=pd.DataFrame(index=df.index),
+        )
+
+        adata.uns["feature_type"] = "gene_expression"
+        adata.uns["inputs"] = args.inputs
+        adata.write_h5ad(out_path)
+        logger.info(f"Saved gene expression AnnData: {adata.shape} → {out_path}")
+        return
+
+    # -----------------------------------------------------------------------
     # Gene expression branch — entirely separate from MAF pipeline
     # -----------------------------------------------------------------------
     if args.feature == "gene_expression":
@@ -307,42 +319,32 @@ def main():
         filename_to_patientid = load_filename_to_patientid(args.filename_to_patientid)
         logger.info(f"Loaded {len(filename_to_patientid)} filename→patient_id mappings")
 
-        mat, var_meta = build_gene_expression_matrix(
+        layers, var_meta = build_gene_expression_matrix(
             args.inputs,
             filename_to_patientid=filename_to_patientid,
-            value_col=args.expression_value,
         )
 
-        # optional patient filter
+        # optional patient filter (applied consistently across all layers)
         if args.patient_ids:
             filter_path = Path(args.patient_ids)
             if filter_path.suffix == ".parquet":
                 pid_df = pd.read_parquet(filter_path)
             else:
                 pid_df = pd.read_csv(filter_path, sep="\t" if filter_path.suffix == ".tsv" else ",")
-            keep = set(pid_df["patient_id"].astype(str))
-            mat = mat[mat.index.isin(keep)]
-            logger.info(f"After patient filter: {mat.shape[0]} patients")
+            keep_patients = set(pid_df["patient_id"].astype(str))
+            layers = {k: v[v.index.isin(keep_patients)] for k, v in layers.items()}
+            logger.info(f"After patient filter: {next(iter(layers.values())).shape[0]} patients")
 
-        if len(mat) == 0:
+        tpm = layers["tpm_unstranded"]
+        if len(tpm) == 0:
             raise RuntimeError("No patients remain after filtering.")
 
-        if args.gene_expression_bins is not None:
-            n = args.gene_expression_bins
-            if n < 2:
-                raise ValueError("--gene_expression_bins must be >= 2")
-            logger.info(f"Binning expression into {n} quantile buckets per gene (0-indexed)...")
-            mat = mat.apply(
-                lambda col: pd.qcut(col, q=n, labels=False, duplicates="drop"),
-                axis=0,
-            )
-
-        obs_meta = pd.DataFrame(index=mat.index)
-        adata = matrix_to_adata(mat, obs_meta=obs_meta, var_meta=var_meta)
+        obs_meta = pd.DataFrame(index=tpm.index)
+        adata = matrix_to_adata(tpm, obs_meta=obs_meta, var_meta=var_meta)
+        for col, mat in layers.items():
+            adata.layers[col] = csr_matrix(mat.values.astype(np.float32))
         adata.uns["feature_type"] = "gene_expression"
-        adata.uns["expression_value"] = args.expression_value
-        if args.gene_expression_bins is not None:
-            adata.uns["gene_expression_bins"] = args.gene_expression_bins
+        adata.uns["layers"] = _EXPRESSION_COLS
         adata.uns["inputs"] = args.inputs
         adata.write_h5ad(out_path)
         logger.info(f"Saved gene expression AnnData: {adata.shape} → {out_path}")

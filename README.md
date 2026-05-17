@@ -56,7 +56,7 @@ papermill notebooks/radiogenomic_recoverability.ipynb notebooks/out/radiogenomic
 
 ### Real data (TCGA-KIRC example)
 #### Imaging data processing
-python scripts/process_imaging.py -d data/tcga_kirc/imaging
+python scripts/process_imaging_tcga_kirc.py -d data/tcga_kirc/imaging
 <!-- python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/whole_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --embedder pyradiomics -->
 python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/organ_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --mask_col organ_mask --embedder pyradiomics
 python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/tumor_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --mask_col tumor_mask --embedder pyradiomics --label 2
@@ -71,7 +71,7 @@ python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_pathwa
 
 gdc-client download -m data/tcga_kirc/genomics/gene_expression_manifest.txt -d data/tcga_kirc/genomics
 tar -xzvf data/tcga_kirc/genomics/gene_expression.tar.gz -C data/tcga_kirc/genomics/gene_expression
-python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/gene_expression.h5ad --feature gene_expression --patient_ids data/tcga_kirc/imaging/metadata.csv --filename_to_patientid data/tcga_kirc/genomics/gene_expression_filename_to_patientid.csv --gene_expression_bins 2 data/tcga_kirc/genomics/gene_expression
+python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/gene_expression.h5ad --feature gene_expression --patient_ids data/tcga_kirc/imaging/metadata.csv --filename_to_patientid data/tcga_kirc/genomics/gene_expression_filename_to_patientid.csv data/tcga_kirc/genomics/gene_expression
 
 #### Run notebooks
 for genomics_h5ad in data/tcga_kirc/genomics/*.h5ad; do
@@ -81,6 +81,16 @@ for genomics_h5ad in data/tcga_kirc/genomics/*.h5ad; do
         papermill notebooks/radiogenomic_recoverability.ipynb "$output_notebook" -p GENOMICS_H5AD "$genomics_h5ad" -p IMAGING_H5AD "$imaging_h5ad"
     done
 done
+
+### NSCLC
+wget -O data/nsclc/imaging/manifest.tcia https://www.cancerimagingarchive.net/wp-content/uploads/NSCLC_Radiogenomics-6-1-21-Version-4.tcia
+wget -O data/nsclc/imaging/metadata.xlsx https://www.cancerimagingarchive.net/wp-content/uploads/NSCLC_Radiogenomics-6-1-21-Version-4-nbia-digest.xlsx
+wget -O data/nsclc/genomics/gene_expression.txt.gz https://ftp.ncbi.nlm.nih.gov/geo/series/GSE103nnn/GSE103584/suppl/GSE103584%5FR01%5FNSCLC%5FRNAseq%2Etxt%2Egz
+nbia-data-retriever --cli /home/jrich/Desktop/rgit/data/nsclc/imaging/manifest.tcia -d /home/jrich/Desktop/rgit/data/nsclc/imaging/dicom -v -f
+python scripts/make_imaging_matrix.py -o data/nsclc/imaging/organ_radiomics.h5ad -m data/nsclc/imaging/metadata.csv --mask_col organ_mask --embedder pyradiomics --label 1
+python scripts/make_imaging_matrix.py -o data/nsclc/imaging/organ_radimagenet.h5ad -m data/nsclc/imaging/metadata.csv --mask_col organ_mask --embedder radimagenet --model_path data/models/RadImageNet_pytorch/ResNet50.pt --clip_min -1000 --clip_max 400 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 185,185,75
+python scripts/make_genomics_matrix.py -o data/nsclc/genomics/gene_expression.h5ad --feature gene_expression data/nsclc/genomics/gene_expression.txt.gz
+
 
 ## Status
 

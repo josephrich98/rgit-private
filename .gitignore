@@ -166,7 +166,6 @@ outputs
 outputs/
 tmp.*
 tmp2.*
-main.aux
-main.out
-main.fls
-main.fdb_latexmk
+manuscript/*
+!manuscript/main.tex
+!manuscript/main.pdf

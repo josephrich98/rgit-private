@@ -1,18 +1,26 @@
-\documentclass[11pt]{article}
+\documentclass{article}
 
-\usepackage[margin=1in]{geometry}
-\usepackage{amsmath, amssymb, amsthm}
-\usepackage{bm}
-\usepackage{microtype}
-\usepackage{xcolor}
-\usepackage[colorlinks=true, linkcolor=lightgray, citecolor=lightgray]{hyperref}
-\usepackage{graphicx}
+\usepackage{arxiv}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
 \usepackage{booktabs}
-\newcommand{\synfig}[1]{notebooks/figures/synthetic/gene_expression_synthetic/imaging_synthetic/#1}
-\newcommand{\kircfig}[1]{notebooks/figures/tcga_kirc/gene_expression/tumor_radimagenet/#1}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{amsfonts}
+\usepackage{bm}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{xcolor}
 
 \pagecolor[rgb]{0.05,0.05,0.05} %black - background color
 \color[rgb]{0.9,0.9,0.9} %grey - text color
+
+
+\newcommand{\synfig}[1]{notebooks/figures/synthetic/gene_expression_synthetic/imaging_synthetic/#1}
+\newcommand{\kircfig}[1]{notebooks/figures/tcga_kirc/gene_expression/tumor_radimagenet/#1}
 
 \newtheorem{proposition}{Proposition}
 \newtheorem{definition}{Definition}
@@ -34,13 +42,28 @@
 
 \title{Image-Identifiable Genomic Subspaces:\\
 A Linear--Gaussian Model of Radiogenomic Recoverability}
+
 \author{
-Joseph Rich$^{1,3}$\\[0.5em] \qquad Lior Pachter$^{1,2}$\thanks{Address correspondence to lpachter@caltech.edu.}
-\small $^1$Division of Biology and Biological Engineering, California Institute of Technology\\
-\small $^2$Department of Computing and Mathematical Sciences, California Institute of Technology\\
-\small $^3$Keck School of Medicine, University of Southern California
+  Joseph Rich \\
+  Division of Biology and Biological Engineering\\
+  California Institute of Technology \\
+  Keck School of Medicine, University of Southern California \\
+  \And
+  Lior Pachter\thanks{Address correspondence to \texttt{lpachter@caltech.edu}.} \\
+  Division of Biology and Biological Engineering\\
+  Department of Computing and Mathematical Sciences\\
+  California Institute of Technology \\
 }
+
 \date{}
+
+\renewcommand{\shorttitle}{Image-Identifiable Genomic Subspaces}
+
+\hypersetup{
+pdftitle={Image-Identifiable Genomic Subspaces: A Linear-Gaussian Model of Radiogenomic Recoverability},
+pdfauthor={Joseph Rich, Lior Pachter},
+pdfkeywords={radiogenomics, canonical correlation analysis, mutual information, recoverability, linear-Gaussian model},
+}
 
 \begin{document}
 \maketitle
@@ -65,6 +88,8 @@ inference. The companion notebook
 pipeline on a pair of \texttt{AnnData} objects, with a synthetic-data fallback
 that has known ground truth.
 \end{abstract}
+
+\keywords{radiogenomics \and canonical correlation analysis \and mutual information \and recoverability \and linear--Gaussian model}
 
 \section{Setup and notation}
 \label{sec:setup}

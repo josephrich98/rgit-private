@@ -25,7 +25,6 @@ Rather than optimizing a specific predictor, the goal is to quantify the *fundam
 ├── notebooks/      # Exploratory analysis and figure generation
 ├── rgit/           # Core Python package
 ├── scripts/        # Standalone analysis scripts
-├── main.tex        # Primary manuscript / technical report
 └── pyproject.toml  # Python project configuration
 ```
 

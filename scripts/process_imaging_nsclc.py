@@ -104,6 +104,8 @@ for series_id in tqdm(sorted(os.listdir(nifti_dir)), desc="Processing images"):
     image_file = os.path.join(patient_dir, image_filename)
     image_file = utils.set_canonical_orientation(image_file, out=True)
 
+image_filename = image_file.split("/")[-1]
+
 utils.run_totalsegmentator(nifti_dir, selected_segmentations=["lung_upper_lobe_left", "lung_lower_lobe_left", "lung_upper_lobe_right", "lung_middle_lobe_right", "lung_lower_lobe_right"], metadata_csv=imaging_metadata_csv, metadata_csv_out=imaging_metadata_csv, remove_small_blobs=True, fill_holes=True, morphological_closing=True, image_filename=image_filename, tumor_mask_filename=None, combined_organ_mask_filename="segmentation_organs.nii.gz", mask_filename_out="segmentation.nii.gz", visualize=False)
 
 metadata_df["image"] = metadata_df["series_id"].apply(lambda sid: os.path.join(nifti_dir, sid, image_filename))

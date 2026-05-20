@@ -14,6 +14,7 @@
 \usepackage{microtype}
 \usepackage{graphicx}
 \usepackage{xcolor}
+\usepackage[numbers,sort&compress]{natbib}
 
 \pagecolor[rgb]{0.05,0.05,0.05} %black - background color
 \color[rgb]{0.9,0.9,0.9} %grey - text color
@@ -97,7 +98,7 @@ that has known ground truth.
 We observe $n$ patients. For patient $i$ let $g_i \in \R^{p}$ be a vector of
 genomic features (e.g.\ expression, somatic mutation burden, copy-number scores)
 and $x_i \in \R^{d}$ a vector of imaging phenotypes (radiomic descriptors, deep
-features, or structured reads). Stack the observations into data matrices
+features, or structured reads)~\citep{lambin2012radiomics,gillies2016radiomics,mayerhoefer2020radiomics}. Stack the observations into data matrices
 $\mathbf{G} \in \R^{n \times p}$ and $\mathbf{X} \in \R^{n \times d}$, with row
 $i$ equal to $g_i\T$ and $x_i\T$ respectively. Random variables are written in
 uppercase ($G, X$), realizations in lowercase ($g, x$). Throughout we assume
@@ -130,7 +131,10 @@ Equations~\eqref{eq:prior}--\eqref{eq:structural} are deliberately the simplest
 model with a non-trivial answer. Their value is that \emph{every} downstream
 quantity is closed-form, so the model functions as an exact upper bound: no
 estimator --- linear or nonlinear --- can recover genomics from imaging better
-than the posterior derived below (under these assumptions). Section~\ref{sec:estimation} relaxes the
+than the posterior derived below (under these assumptions). This fundamental-limit
+framing is in the spirit of rate--distortion theory and the information
+bottleneck~\citep{shannon1948mathematical,berger1971rate,tishby1999ib,tishby2015deep,chechik2005gaussianib},
+specialized here to a tractable linear--Gaussian channel. Section~\ref{sec:estimation} relaxes the
 isotropic-noise and known-parameter assumptions for practical fitting.
 
 \section{Marginal and joint laws}
@@ -399,7 +403,7 @@ I(G; X) = \tfrac12 \sum_{i=1}^{r} \log\!\left(1 + \frac{\lambda_i}{\sigma^2}\rig
 
 \begin{proof}
 For jointly Gaussian $(G,X)$,
-$I(G;X) = \tfrac12 \log\big(\det\Sg / \det\Sgcx\big)$. Substituting
+$I(G;X) = \tfrac12 \log\big(\det\Sg / \det\Sgcx\big)$~\citep{cover2006elements}. Substituting
 \eqref{eq:precision}, $\det \Sgcx = \det\Sg \,/ \det(I_p + \sigma^{-2}\Sg^{1/2}A\T A \Sg^{1/2})$,
 and Sylvester's determinant identity moves $A$ to the other side to give
 $\det(I_d + \sigma^{-2} A\Sg A\T)$. Diagonalizing $A\Sg A\T$ yields
@@ -565,7 +569,9 @@ that achieve it. Reading the loadings of $a_1, a_2, \dots$ back onto genes or
 pathways answers ``which biology is image-identifiable'': the leading directions
 typically align with coarse, spatially expressed programs --- proliferation,
 hypoxia, angiogenesis, necrosis, immune infiltration, tumor burden, stromal
-remodeling --- rather than with individual transcripts.
+remodeling --- rather than with individual transcripts, consistent with
+clear-cell RCC radiogenomic
+findings~\citep{karlo2014ccrcc,shinagare2015ccrcc,shao2025hypoxia}.
 
 \paragraph{Illustration on synthetic data.}
 Figure~\ref{fig:synthetic-spectrum} shows the recoverability spectrum on a
@@ -623,7 +629,8 @@ variables from it. The recoverable dimension is a property of the
 \emph{biology--imaging channel}, not of the estimator. A data-processing remark:
 imaging features are themselves a deterministic, lossy function
 $x = \phi(\text{image})$; any such post-processing can only shrink
-$\rank(\Sgx)$ and lower each $\rho_i$, never raise them.
+$\rank(\Sgx)$ and lower each $\rho_i$, never raise them, by the data
+processing inequality~\citep{cover2006elements,tishby2015deep,saxe2019ib,achille2018infodropout,kolchinsky2019nonlinearib}.
 
 \section{Estimation from finite samples}
 \label{sec:estimation}
@@ -634,7 +641,7 @@ and~\ref{prop:eig} require only $\Sg, \Sx, \Sgx$, we estimate those directly.
 
 \subsection{Regularized covariances}
 \label{sec:estimation-cov}
-Replace sample covariances by shrinkage estimators (e.g.\ Ledoit--Wolf),
+Replace sample covariances by shrinkage estimators (e.g.\ Ledoit--Wolf~\citep{ledoit2004shrinkage}),
 $\hat\Sg = (1-\alpha_G)\,S_G + \alpha_G\, \nu_G I_p$ and likewise $\hat\Sx$, with
 $S_G = n^{-1}\mathbf{G}\T\mathbf{G}$ the centered sample covariance; the
 cross-covariance is $\hat\Sgx = n^{-1}\mathbf{G}\T\mathbf{X}$. Shrinkage keeps
@@ -710,7 +717,7 @@ away from $1$). Under the null $\Sgx = 0$, the squared sample canonical
 correlations follow a Wachter-type law on
 $[(\sqrt{\kappa_G(1-\kappa_X)} - \sqrt{\kappa_X(1-\kappa_G)})^2,
  (\sqrt{\kappa_G(1-\kappa_X)} + \sqrt{\kappa_X(1-\kappa_G)})^2]$
-(Wachter, 1980; Yang \& Pan, 2015); the leading sample value already sits well
+\citep{wachter1980limiting,yang2015independence}; the leading sample value already sits well
 above zero by geometry. Estimates of $\rho_i$ are systematically inflated and
 ordinary CCA must be replaced by its regularized form, with shrinkage
 parameters tuned by cross-validation.
@@ -862,7 +869,9 @@ Section~\ref{sec:estimation-regimes}.}
 \section{Interpretation for radiogenomics}
 \label{sec:interpretation}
 
-The model reframes the radiogenomic question. Rather than testing whether CT
+The model reframes the radiogenomic
+question~\citep{rutman2009radiogenomics,gillies2016radiomics,lambin2017radiomics,bodalal2019radiogenomics}.
+Rather than testing whether CT
 predicts each gene --- a high-dimensional, low-power multiple-testing problem ---
 it asks for the \emph{recoverability spectrum} $\{\rho_i^2\}$ and the associated
 genomic directions $\{a_i\}$. The outputs are: (1) a small number of
@@ -997,7 +1006,7 @@ empirical-Bayes shrinkage for rare mutations.
 tetrachoric correlations from $2{\times}2$ tables of $(G_j, G_k)$ by maximum
 likelihood under the bivariate-normal copula, then project the resulting matrix
 to the nearest positive-definite correlation matrix (e.g.\ Higham's
-\texttt{nearcorr}). For high-dimensional panels apply Ledoit--Wolf shrinkage as
+\texttt{nearcorr}~\citep{higham2002nearcorr}). For high-dimensional panels apply Ledoit--Wolf shrinkage as
 in Section~\ref{sec:estimation-cov}.
 \item[(iii)] \textbf{Cross-modal covariance $\hat\Sigma_{ZX}$.} The
 point-biserial covariance $\Cov(G_j, X_\ell)$ is related to the latent
@@ -1011,7 +1020,9 @@ the sample and rescale by $\phi(\hat\tau_j)$ to obtain $\hat\Sigma_{ZX, j\ell}$.
 
 With $(\hat\Sigma_Z, \hat\Sigma_{ZX}, \hat\Sigma_X)$ in hand, the regularized
 CCA of Section~\ref{sec:estimation-cca}, the permutation null of
-Section~\ref{sec:estimation-honest}, and the empirical MI bound carry over
+Section~\ref{sec:estimation-honest}, and the empirical MI bound
+(estimated, e.g., by $k$-nearest-neighbour or neural
+estimators~\citep{kraskov2004mi,belghazi2018mine,paninski2003entropy}) carry over
 without further change. The dimensional-collapse warnings of
 Section~\ref{sec:estimation-regimes} are if anything \emph{more} acute, since
 tetrachoric estimation has higher variance than Pearson correlation,
@@ -1038,7 +1049,7 @@ into a single coherent recoverability calculation.
 \label{sec:tcga-kirc}
 
 We now instantiate the framework on a real radiogenomic cohort --- TCGA-KIRC
-(clear-cell renal cell carcinoma) --- to demonstrate how the recoverability
+(clear-cell renal cell carcinoma)~\citep{ricketts2018tcgakirc} --- to demonstrate how the recoverability
 spectrum, the cross-validated and permutation-calibrated diagnostics of
 Section~\ref{sec:estimation-honest}, and the dimensional-collapse warnings of
 Section~\ref{sec:estimation-regimes} interact on a typical cohort. The point
@@ -1061,19 +1072,21 @@ two scripts in \texttt{scripts/}.
 For each TCGA-KIRC patient we obtain the venous-phase abdominal CT volume
 (\texttt{0502\_VENOUS.nii}) and a manually curated tumour mask. The pipeline:
 \begin{enumerate}
-\item Pull the canonical TCIA volumes and the radiologist-drawn tumour
+\item Pull the canonical TCIA volumes~\citep{clark2013tcia,tcgakirc_tcia} and the
+radiologist-drawn tumour
 segmentations; orient every volume into the canonical
 nibabel orientation.
-\item Run TotalSegmentator with the
+\item Run TotalSegmentator~\citep{wasserthal2023totalsegmentator} with the
 \texttt{kidney\_left}/\texttt{kidney\_right} target list to produce an organ
 mask; combine with the tumour mask to form (tumour, organ, tumour$\cup$organ)
 mask triples per patient. Small blobs are removed, holes filled, and a
 morphological closing applied to stabilise mask boundaries.
 \item Extract patient-level imaging features. We use a pretrained
-\emph{RadImageNet} 2D backbone applied tile-wise within the tumour mask
+\emph{RadImageNet}~\citep{mei2022radimagenet} 2D backbone applied tile-wise within the tumour mask
 (\texttt{rgit.radimagenet.get\_radimagenet\_embeddings}), producing a
 $d_{\mathrm{native}} = 1841$-dimensional embedding per patient. (A second
-pipeline using PyRadiomics shape/texture features is supported for
+pipeline using PyRadiomics~\citep{vangriethuysen2017pyradiomics,aerts2014radiomics}
+shape/texture features is supported for
 ablations.)
 \item Stack patient-level embeddings into an \texttt{AnnData} object whose
 \texttt{obs} index is the TCGA \texttt{patient\_id} and whose \texttt{var}
@@ -1087,7 +1100,7 @@ from the GDC) and the somatic-mutation MAFs.
 \begin{enumerate}
 \item Counts are CPM-normalised, $\log_{1+}$-transformed, and reduced to the
 top $2000$ highly variable genes (Seurat-style HVG selection in
-\texttt{scanpy.pp.highly\_variable\_genes}); the resulting matrix is stored
+\texttt{scanpy.pp.highly\_variable\_genes}~\citep{wolf2018scanpy}); the resulting matrix is stored
 in the primary \texttt{AnnData}.
 \item Somatic mutations are folded into a sparse binary
 gene-symbol matrix on the same patient index for downstream per-gene
@@ -1259,7 +1272,8 @@ adaptive rule is an order of magnitude beyond typical radiogenomic cohort
 sizes. The framework converts the null result into a quantitative cohort
 specification.
 \item \emph{Audit of literature predictors.} Published radiogenomic AUCs
-in the range $0.65$--$0.80$ at cohort sizes $n \sim 100$--$300$ imply
+in the range $0.65$--$0.80$ at cohort sizes $n \sim 100$--$300$
+\citep{jamshidi2015ccrcc,udayakumar2024radiogenomic,gevaert2012nsclc,bi2019ai,hosny2018ai} imply
 per-gene recoverabilities meaningfully above the cohort-statistical
 ceiling derived above for KIRC. The non-linear validation of
 Section~\ref{sec:kirc-pergene} matches but does not exceed the linear

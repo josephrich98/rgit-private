@@ -36,6 +36,8 @@ __all__ = [
     "imaging_variance_explained",
     "cross_validated_recoverability",
     "permutation_test",
+    "cv_permutation_test",
+    "gaussian_rank_transform",
     "subspace_alignment",
     "make_synthetic_radiogenomics",
     "true_recoverability",
@@ -319,6 +321,69 @@ def permutation_test(
     for b in range(n_perm):
         perm = rng.permutation(G.shape[0])
         null[b] = fit_recoverability(G[perm], X, reg_g, reg_x, n_components).rho
+
+    pvalues = (1.0 + np.sum(null >= observed[None, :], axis=0)) / (1.0 + n_perm)
+    return observed, null, pvalues
+
+
+def gaussian_rank_transform(M) -> np.ndarray:
+    """Column-wise Gaussian-copula marginal transform (rank -> inverse normal).
+
+    Each feature is mapped to an exact standard-normal marginal via
+    ``Phi^{-1}(rank / (n+1))``. This is the practical instantiation of the
+    Gaussian-copula assumption invoked in the manuscript's Bernoulli/copula
+    section: it removes heavy tails and skew from the observed marginals so the
+    linear--Gaussian fit keys on the *dependence* structure (the canonical
+    correlations), which is the only thing the model claims to model. Use it on
+    both modalities when raw radiomic / expression marginals are far from
+    Gaussian (large excess kurtosis).
+    """
+    M = to_dense(M)
+    n = M.shape[0]
+    ranks = np.argsort(np.argsort(M, axis=0), axis=0) + 1.0
+    return _ndtri(ranks / (n + 1.0))
+
+
+def cv_permutation_test(
+    G,
+    X,
+    n_components: int = 3,
+    n_perm: int = 200,
+    n_folds: int = 5,
+    reg_g="lw",
+    reg_x="lw",
+    random_state: int = 0,
+):
+    """Honest, scale-matched permutation test on *cross-validated* recoverability.
+
+    Unlike :func:`permutation_test` -- which builds its null from in-sample
+    canonical correlations, whose leading values are inflated toward 1 by
+    high-dimensional geometry -- this routine compares the held-out
+    ``R_i^{cv}`` against a null built from the *same* cross-validated statistic
+    under permuted patient labels. The two therefore live on the same (deflated)
+    scale, so the resulting effective rank is not biased to zero by the
+    estimator's own optimism. This is the recommended test for the
+    effective image-identifiable rank.
+
+    Returns
+    -------
+    observed : (n_components,) mean held-out recoverability per direction.
+    null : (n_perm, n_components) permuted held-out recoverability.
+    pvalues : (n_components,) permutation p-values.
+    """
+    G = to_dense(G)
+    X = to_dense(X)
+    rng = np.random.default_rng(random_state)
+
+    observed = cross_validated_recoverability(
+        G, X, n_components, n_folds, reg_g, reg_x, random_state
+    ).mean(0)
+    null = np.zeros((n_perm, n_components))
+    for b in range(n_perm):
+        perm = rng.permutation(G.shape[0])
+        null[b] = cross_validated_recoverability(
+            G[perm], X, n_components, n_folds, reg_g, reg_x, random_state + 1
+        ).mean(0)
 
     pvalues = (1.0 + np.sum(null >= observed[None, :], axis=0)) / (1.0 + n_perm)
     return observed, null, pvalues

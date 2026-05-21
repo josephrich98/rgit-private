@@ -1,0 +1,479 @@
+% slides.tex --- minimal slide deck distilled from main.tex
+% One page per slide (Beamer). Build with:  latexmk -pdf slides.tex
+% Each PDF page is a self-contained slide: title + a few equations
+% (or one equation with a short proof below). Insert pages into
+% PowerPoint as images, or copy the rendered math directly.
+
+\documentclass[aspectratio=169,12pt]{beamer}
+
+\usetheme{default}
+\usecolortheme{default}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}{}          % no page numbers
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+\setbeamertemplate{frametitle}[default][left]
+
+% all text black
+\setbeamercolor{normal text}{fg=black}
+\setbeamercolor{frametitle}{fg=black}
+\setbeamercolor{title}{fg=black}
+\setbeamercolor{subtitle}{fg=black}
+\setbeamercolor{author}{fg=black}
+\setbeamercolor{itemize item}{fg=black}
+\setbeamercolor{itemize subitem}{fg=black}
+\setbeamercolor{enumerate item}{fg=black}
+\usebeamercolor[fg]{normal text}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{amsfonts}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+
+% --- figure-path macros copied verbatim from main.tex ---
+\newcommand{\synfig}[1]{notebooks/figures/synthetic/gene_expression_synthetic/imaging_synthetic/#1}
+\newcommand{\kircfig}[1]{notebooks/figures/tcga_kirc/gene_expression/organ_radiomics/#1}
+\newcommand{\nsclcfig}[1]{notebooks/figures/nsclc/gene_expression/organ_radiomics_subset/#1}
+
+% --- macros copied verbatim from main.tex so notation matches ---
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Sg}{\Sigma_{G}}
+\newcommand{\Sx}{\Sigma_{X}}
+\newcommand{\Sgx}{\Sigma_{GX}}
+\newcommand{\Sxg}{\Sigma_{XG}}
+\newcommand{\Sgcx}{\Sigma_{G\mid X}}
+\newcommand{\T}{^{\top}}
+
+\title{Image-Identifiable Genomic Subspaces}
+\subtitle{A Linear--Gaussian Model of Radiogenomic Recoverability}
+\author{Joseph Rich \and Lior Pachter}
+\date{}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Notation table
+% ------------------------------------------------------------------
+\begin{frame}{Setup and notation}
+  \small
+  \centering
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabular}{ll}
+    \toprule
+    $G \in \R^p,\ X \in \R^d$ & genomic / imaging feature vectors\\
+    $\mathbf{G}\in\R^{n\times p},\ \mathbf{X}\in\R^{n\times d}$ & stacked data ($n$ patients)\\
+    $A \in \R^{d\times p}$ & genomics-to-imaging transfer map\\
+    $\sigma^2$ & isotropic imaging noise variance\\
+    $\Sg,\ \Sx,\ \Sgx$ & genomic / imaging / cross covariance\\
+    $\Sgcx$ & posterior covariance (recoverability floor)\\
+    $B = \Sgx \Sx^{-1}$ & Bayes-optimal map $x \mapsto \E[g\mid x]$\\
+    $M = \sigma^{-1} A \Sg^{1/2}$ & whitened transfer operator; $d_i$ its sing.\ values\\
+    $\rho_i,\ R_i = \rho_i^2$ & $i$-th canonical correlation / recoverability\\
+    $a_i,\ b_i$ & $i$-th canonical genomic / imaging direction\\
+    $I(G;X)$ & mutual information between modalities\\
+    $k$ & dimension of image-identifiable genomic subspace\\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Generative model
+% ------------------------------------------------------------------
+\begin{frame}{The linear--Gaussian generative model}
+  \begin{align*}
+    G &\sim \N(0, \Sg),\\[2pt]
+    X \mid G &\sim \N(A G,\ \sigma^2 I_d), \qquad A \in \R^{d \times p}.
+  \end{align*}
+  \vfill
+  Equivalently,
+  \[
+    X = A G + \varepsilon, \qquad
+    \varepsilon \sim \N(0, \sigma^2 I_d), \quad \varepsilon \perp G.
+  \]
+  \vfill
+  \footnotesize
+  Simplest model with a non-trivial answer: \emph{every} downstream quantity
+  is closed-form, so it acts as an exact upper bound on what any estimator can recover.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Joint law
+% ------------------------------------------------------------------
+\begin{frame}{Joint Gaussian law}
+  \[
+  \begin{pmatrix} G\\ X \end{pmatrix}
+  \sim
+  \N\!\left(
+  \mathbf{0},
+  \begin{pmatrix}
+  \Sg & \Sg A\T\\
+  A\Sg & A\Sg A\T + \sigma^2 I_d
+  \end{pmatrix}
+  \right).
+  \]
+  \vfill
+  In particular,
+  \[
+    X \sim \N(0,\Sx), \qquad \Sx = A\Sg A\T + \sigma^2 I_d,
+  \]
+  \[
+    \Sgx = \Cov(G,X) = \Sg A\T.
+  \]
+  \vfill
+  \footnotesize
+  Imaging covariance splits additively into a genomics-driven part $A\Sg A\T$
+  and an irreducible part $\sigma^2 I_d$.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Joint law -- proof
+% ------------------------------------------------------------------
+\begin{frame}{Joint law --- proof sketch}
+  \small
+  $(G,X)$ is an affine map of independent Gaussians $(G,\varepsilon)$, hence jointly Gaussian; both are centered, so the mean is $0$.
+  \vfill
+  \begin{align*}
+    \Cov(G,G) &= \Sg,\\
+    \Cov(G,X) &= \Cov(G,\,AG+\varepsilon) = \Cov(G,AG) = \Sg A\T,\\
+    \Cov(X,X) &= \Cov(AG) + \Cov(\varepsilon) = A\Sg A\T + \sigma^2 I_d.
+  \end{align*}
+  \vfill
+  Cross terms vanish by $G \perp \varepsilon$. Collecting the blocks gives the joint covariance. \hfill$\qed$
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Posterior
+% ------------------------------------------------------------------
+\begin{frame}{Bayes-optimal recovery: the posterior}
+  $G \mid X \sim \N(\hat g(X),\ \Sgcx)$ with
+  \begin{align*}
+    \hat g(X) &= \E[G\mid X] = \Sg A\T\big(A\Sg A\T + \sigma^2 I_d\big)^{-1} X = BX,\\[2pt]
+    \Sgcx &= \Sg - \Sg A\T\big(A\Sg A\T + \sigma^2 I_d\big)^{-1} A\Sg.
+  \end{align*}
+  \vfill
+  Precision form (Woodbury):
+  \[
+    \Sgcx^{-1} = \Sg^{-1} + \sigma^{-2} A\T A,
+    \qquad B = \sigma^{-2}\,\Sgcx\, A\T.
+  \]
+  \vfill
+  \footnotesize
+  $\Sgcx$ is a \textbf{hard floor} on residual genomic uncertainty: no algorithm
+  can do better. Imaging \emph{adds} precision $\sigma^{-2}A\T A$ to the prior.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Mutual information
+% ------------------------------------------------------------------
+\begin{frame}{Mutual information and the SNR decomposition}
+  \[
+    I(G;X)
+    = \tfrac12 \log \frac{\det \Sg}{\det \Sgcx}
+    = \tfrac12 \log \det\!\big(I_d + \sigma^{-2} A\Sg A\T\big).
+  \]
+  \vfill
+  With $\lambda_1 \ge \cdots \ge \lambda_r > 0$ the nonzero eigenvalues of $A\Sg A\T$:
+  \[
+    I(G;X) = \tfrac12 \sum_{i=1}^{r} \log\!\Big(1 + \tfrac{\lambda_i}{\sigma^2}\Big).
+  \]
+  \vfill
+  \footnotesize
+  Each image-visible genomic direction contributes $\tfrac12\log(1+\mathrm{SNR}_i)$.
+  Directions with small signal relative to noise contribute nothing.
+\end{frame}
+
+% ------------------------------------------------------------------
+% FIGURE: MI per direction (synthetic)
+% ------------------------------------------------------------------
+\begin{frame}{A handful of directions carry almost all the information}
+  \centering
+  \includegraphics[width=0.72\linewidth]{\synfig{mi_per_direction.pdf}}
+  \par\footnotesize
+  Per-direction $\tfrac12\log(1+d_i^2)$ on a synthetic instance ($n{=}800$, $p{=}80$, $d{=}40$);
+  cumulative MI saturates at $\approx 6.45$ bits after the first few components.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Recoverability = squared canonical correlation
+% ------------------------------------------------------------------
+\begin{frame}{Recoverability $=$ squared canonical correlation}
+  Whiten $U = \Sg^{-1/2}G$, transfer operator $M = \sigma^{-1}A\Sg^{1/2} = \sum_i d_i u_i v_i\T$.
+  Canonical direction $a_i = \Sg^{-1/2} v_i$, score $S_i = a_i\T G$:
+  \[
+    \Var(S_i \mid X) = \frac{1}{1+d_i^2},
+    \qquad
+    \rho_i = \frac{d_i}{\sqrt{1+d_i^2}}.
+  \]
+  \vfill
+  \[
+    \boxed{\;R(a_i) = 1 - \Var(S_i\mid X) = \frac{d_i^2}{1+d_i^2} = \rho_i^2.\;}
+  \]
+  \vfill
+  \footnotesize
+  The whole analysis reduces to CCA between $\mathbf{G}$ and $\mathbf{X}$:
+  only the moments $\Sg,\Sx,\Sgx$ enter --- $A$ and $\sigma^2$ never appear individually.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Named direction recoverability score
+% ------------------------------------------------------------------
+\begin{frame}{Recoverability of a named genomic direction}
+  For a fixed score $Y = v\T G$ (a gene, pathway, polygenic score):
+  \[
+    R(v) = 1 - \frac{v\T \Sgcx\, v}{v\T \Sg\, v} \;\in\; [0,1].
+  \]
+  \vfill
+  Equals the population $R^2$ of the Bayes-optimal predictor of $Y$ from $X$. The core matrix has a moment-only form:
+  \[
+    \Sg - \Sgcx = \Sg A\T \Sx^{-1} A \Sg = \Sgx\,\Sx^{-1}\,\Sxg.
+  \]
+  \vfill
+  \footnotesize
+  $R(v)=0$: imaging carries no information about $Y$. \quad
+  $R(v)=1$: imaging determines it exactly.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Eigenproblem = CCA
+% ------------------------------------------------------------------
+\begin{frame}{The recoverability eigenproblem $=$ CCA}
+  \[
+    \max_{v \neq 0}\; R(v)
+    = \max_{v \neq 0}\;
+    \frac{v\T \big(\Sgx \Sx^{-1} \Sxg\big) v}{v\T \Sg\, v}
+  \]
+  has stationary points solving the generalized eigenproblem
+  \[
+    \Sgx\, \Sx^{-1}\, \Sxg\; v = \mu\, \Sg\, v,
+    \qquad \mu_i = \rho_i^2,\quad v = a_i.
+  \]
+  \vfill
+  \footnotesize
+  Solutions are exactly the canonical correlation directions, and
+  $\max_v R(v) = \rho_1^2$. Deliverable: a \emph{recoverability spectrum}
+  $\rho_1^2 \ge \rho_2^2 \ge \cdots$ with genomic directions $\{a_i\}$.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Rank limit
+% ------------------------------------------------------------------
+\begin{frame}{Rank limit and identifiability}
+  \[
+    \rank(\Sg - \Sgcx) = \rank(A\Sg A\T)
+    \le \min\!\big(d,\ p,\ \rank A,\ \rank \Sg\big).
+  \]
+  \vfill
+  \footnotesize
+  \begin{itemize}
+    \item At most $\min(d,p,\rank A,\rank\Sg)$ canonical correlations are nonzero.
+    \item Even with $p=20{,}000$ genes, imaging exposes only a projection whose
+      dimension is capped by the channel --- not the gene panel size.
+    \item Imaging features $x = \phi(\text{image})$ are themselves lossy:
+      post-processing can only shrink $\rank(\Sgx)$ and lower each $\rho_i$
+      (data-processing inequality).
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+% FIGURE: synthetic spectrum + truth validation
+% ------------------------------------------------------------------
+\begin{frame}{The estimator recovers the planted canonical structure}
+  \centering
+  \includegraphics[width=0.49\linewidth]{\synfig{recoverability_spectrum.pdf}}
+  \hfill
+  \includegraphics[width=0.49\linewidth]{\synfig{synthetic_truth_validation.pdf}}
+  \par\footnotesize
+  Synthetic instance with known truth: leading $\hat\rho_i^2$ matches the planted
+  values (left); estimated quantities track the closed-form predictions (right).
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Estimation regimes
+% ------------------------------------------------------------------
+\begin{frame}{Finite-sample regimes ($\kappa_G = p^\star/n,\ \kappa_X = d^\star/n$)}
+  \footnotesize
+  \begin{enumerate}
+    \item \textbf{Classical} ($\kappa_G+\kappa_X \ll 1$): sample CCA consistent,
+      $\hat\rho_i \to \rho_i$ at rate $n^{-1/2}$.
+    \item \textbf{High-dimensional} ($\kappa_G+\kappa_X \lesssim 1$): null squared
+      correlations follow a Wachter law; leading $\hat\rho_i$ inflated. Use
+      regularized CCA.
+    \item \textbf{Saturating} ($p^\star + d^\star \ge n$): $\hat\rho_1=\cdots=1$
+      regardless of association; spectrum not estimable.
+  \end{enumerate}
+  \vfill
+  Working rule: reduce \emph{both} modalities so $p^\star + d^\star \le n/\tau$, $\tau \in [5,10]$.
+  Report cross-validated $\hat R_i^{\mathrm{cv}}$ and a scale-matched permutation null.
+\end{frame}
+
+% ------------------------------------------------------------------
+% FIGURE: synthetic CV + permutation
+% ------------------------------------------------------------------
+\begin{frame}{In-sample recoverability is inflated; CV + permutation are honest}
+  \centering
+  \includegraphics[width=0.49\linewidth]{\synfig{cv_recoverability.pdf}}
+  \hfill
+  \includegraphics[width=0.49\linewidth]{\synfig{permutation_null.pdf}}
+  \par\footnotesize
+  In-sample $\hat R_i$ overshoots; $5$-fold $\hat R_i^{\mathrm{cv}}$ tracks the
+  planted truth (left). Permutation null recovers the planted rank, $p<0.01$ for
+  the top three (right).
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Estimation -- regularized CCA
+% ------------------------------------------------------------------
+\begin{frame}{Estimation: regularized CCA}
+  Shrinkage covariances (Ledoit--Wolf) $\hat\Sg, \hat\Sx$ and
+  $\hat\Sgx = n^{-1}\mathbf{G}\T\mathbf{X}$. Then
+  \[
+    \hat M = \hat\Sg^{-1/2}\,\hat\Sgx\,\hat\Sx^{-1/2}
+    = \hat U \hat D \hat V\T,
+  \]
+  \[
+    \hat\rho_i = \hat d_i,\quad
+    \hat R_i = \hat\rho_i^2,\quad
+    \hat a_i = \hat\Sg^{-1/2}\hat u_i,\quad
+    \hat b_i = \hat\Sx^{-1/2}\hat v_i.
+  \]
+  \vfill
+  \footnotesize
+  Gaussian-copula marginal transform $\tilde M_{ij}=\Phi^{-1}(\mathrm{rank}_i/(n+1))$
+  applied to both sides --- radiomic marginals have excess kurtosis in the tens.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Bernoulli copula extension
+% ------------------------------------------------------------------
+\begin{frame}{Bernoulli extension for mutations (Gaussian copula)}
+  Latent $Z \sim \N(0,\Sigma_Z)$, $\mathrm{diag}(\Sigma_Z)=I_p$;
+  thresholding $G_j = \mathbf{1}\{Z_j > \tau_j\}$, $\tau_j = \Phi^{-1}(1-p_j)$.
+  Imaging couples to the latent: $X \mid Z \sim \N(BZ, \sigma^2 I_d)$.
+  \vfill
+  Data-processing bound, tight up to the binarization gap:
+  \[
+    I(G;X) \le I(Z;X) = -\tfrac12 \sum_{i=1}^{k} \log\big(1-\rho_i^2\big).
+  \]
+  \vfill
+  \footnotesize
+  Per-gene AUC ceiling:
+  $\mathrm{AUC}_j \le \Phi\!\big(\sqrt{R_j^Z/(1-R_j^Z)}\big/\sqrt2\big)$.
+  All CCA / MI machinery transfers with $\Sg \to \Sigma_Z$.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: KIRC results
+% ------------------------------------------------------------------
+\begin{frame}{Application: TCGA-KIRC ($n=190$)}
+  \footnotesize
+  Organ radiomics ($d_{\mathrm{native}}=107$), $2000$ HVGs, copula marginals,
+  $p^\star=d^\star=38$.
+  \vfill
+  \begin{itemize}
+    \item In-sample $\hat\rho_1 \approx 0.76$ ($\hat R_1 \approx 0.58$), $3.9$ bits.
+    \item Cross-validated $\hat R_1^{\mathrm{cv}} \approx 0.07$--$0.1$; variance share $0.27 \to 0.011$.
+    \item Permutation $p<0.05$ for leading-3 in $12/12$ preprocessing variants.
+    \item $I(G;X)\big|_{\text{top-}3} \le 1.58$ bits (one-sided $95\%$ UCL).
+    \item Effective rank $\hat k_{\mathrm{eff}} = 1$ (median).
+  \end{itemize}
+  \vfill
+  \emph{One genomic direction is robustly image-identifiable; recoverability $\approx 0.1$.}
+\end{frame}
+
+% ------------------------------------------------------------------
+% FIGURE: KIRC spectrum + MI upper bound
+% ------------------------------------------------------------------
+\begin{frame}{TCGA-KIRC: one weak but real image-identifiable direction}
+  \centering
+  \includegraphics[width=0.49\linewidth]{\kircfig{cv_recoverability.pdf}}
+  \hfill
+  \includegraphics[width=0.49\linewidth]{\kircfig{mi_upper_bound.pdf}}
+  \par\footnotesize
+  Cross-validated $\hat R_i$ is a small positive residual (left); observed
+  cumulative MI sits at the upper edge of the null, $I(G;X)\le 1.58$ bits (right).
+\end{frame}
+
+% ------------------------------------------------------------------
+% FIGURE: KIRC per-gene AUC
+% ------------------------------------------------------------------
+\begin{frame}{KIRC: recoverability score predicts which genes imaging can read}
+  \centering
+  \includegraphics[width=0.7\linewidth]{\kircfig{per_gene_auc.pdf}}
+  \par\footnotesize
+  High-recoverability genes clear the chance line (AUC $\approx 0.65$);
+  low-recoverability genes sit at $0.5$. Random forest does not exceed the linear ceiling.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: NSCLC results
+% ------------------------------------------------------------------
+\begin{frame}{Application: NSCLC ($n=90$) --- the counterpoint}
+  \footnotesize
+  Same pipeline, lung organ radiomics, $p^\star=d^\star=18$.
+  \vfill
+  \begin{itemize}
+    \item In-sample $\hat\rho_1 = 0.82$, $2.6$ bits; null well-separated ($p=0.005$).
+    \item Held-out canonical $R^2 = 0.40$; $\hat R_1^{\mathrm{cv}} = 0.33$.
+    \item Per-gene AUC: identifiable $0.73$ / $0.69$ vs non-identifiable $0.51$ / $0.53$.
+    \item Survives de-confounding (scanner / kernel): $\hat R_1^{\mathrm{cv}} \approx 0.24$--$0.30$.
+  \end{itemize}
+  \vfill
+  Two cohorts, same model: borderline single direction ($\approx 0.1$) in RCC,
+  solid single direction ($\approx 0.33$) in NSCLC --- same low rank, different strength.
+\end{frame}
+
+% ------------------------------------------------------------------
+% FIGURE: NSCLC spectrum + per-gene AUC
+% ------------------------------------------------------------------
+\begin{frame}{NSCLC: a solid single direction, an order of magnitude above KIRC}
+  \centering
+  \includegraphics[width=0.49\linewidth]{\nsclcfig{cv_recoverability.pdf}}
+  \hfill
+  \includegraphics[width=0.49\linewidth]{\nsclcfig{per_gene_auc.pdf}}
+  \par\footnotesize
+  Leading $\hat R_1^{\mathrm{cv}}\approx 0.33$ (left); per-gene AUC $0.73/0.69$ for
+  identifiable vs $0.51/0.53$ for non-identifiable genes (right).
+\end{frame}
+
+% ------------------------------------------------------------------
+% FIGURE: KIRC vs NSCLC sample-complexity sweeps
+% ------------------------------------------------------------------
+\begin{frame}{Honest signal lives below the in-sample bulk at all cohort sizes}
+  \centering
+  \includegraphics[width=0.49\linewidth]{\kircfig{sample_complexity_sweep.pdf}}
+  \hfill
+  \includegraphics[width=0.49\linewidth]{\nsclcfig{sample_complexity_sweep.pdf}}
+  \par\footnotesize
+  Sample-complexity sweeps, KIRC (left) and NSCLC (right): $\hat R_1^{\mathrm{cv}}$
+  is visible only through CV/permutation, never the raw in-sample spectrum.
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide: Takeaway
+% ------------------------------------------------------------------
+\begin{frame}{Takeaway}
+  \begin{itemize}
+    \item Radiogenomics should target \textbf{image-identifiable low-dimensional
+      genomic subspaces}, not individual genes.
+    \item Recoverability of canonical direction $i$ is exactly $\rho_i^2$ ---
+      computable by regularized CCA from $\Sg, \Sx, \Sgx$ alone.
+    \item The recoverable dimension is a property of the \emph{biology--imaging
+      channel}, bounded by $\rank(A)$, not by panel size.
+    \item Honest estimands are cross-validated and permutation-calibrated;
+      in-sample spectra are badly inflated when $p,d \sim n$.
+  \end{itemize}
+\end{frame}
+
+\end{document}

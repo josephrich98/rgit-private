@@ -89,31 +89,31 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--input_dir",
+        "-i", "--input_dir",
         required=True,
         help="Directory containing MRI files",
     )
 
     parser.add_argument(
-        "--output_dir",
+        "-o", "--output_dir",
         required=True,
         help="Output directory",
     )
 
     parser.add_argument(
-        "--license_file",
+        "-l", "--license_file",
         default=os.getenv("FREESURFER_HOME") + "/license.txt",
         help="FreeSurfer license file (optional if using --seg_only)",
     )
 
     parser.add_argument(
-        "--threads",
+        "-t", "--threads",
         type=int,
         default=8,
     )
 
     parser.add_argument(
-        "--full",
+        "-f", "--full",
         action="store_true",
         help="Run full FastSurfer pipeline instead of seg_only",
     )

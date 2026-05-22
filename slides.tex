@@ -6,6 +6,9 @@
 
 \documentclass[aspectratio=169,12pt]{beamer}
 
+\newif\ifdarkmode
+\darkmodetrue  % Uncomment this line to enable dark mode
+
 \usetheme{default}
 \usecolortheme{default}
 \setbeamertemplate{navigation symbols}{}
@@ -13,15 +16,29 @@
 \setbeamerfont{frametitle}{size=\large,series=\bfseries}
 \setbeamertemplate{frametitle}[default][left]
 
-% all text black
-\setbeamercolor{normal text}{fg=black}
-\setbeamercolor{frametitle}{fg=black}
-\setbeamercolor{title}{fg=black}
-\setbeamercolor{subtitle}{fg=black}
-\setbeamercolor{author}{fg=black}
-\setbeamercolor{itemize item}{fg=black}
-\setbeamercolor{itemize subitem}{fg=black}
-\setbeamercolor{enumerate item}{fg=black}
+% Dark mode toggle
+\ifdarkmode
+  % Dark mode colors
+  \setbeamercolor{background canvas}{bg=black}
+  \setbeamercolor{normal text}{fg=white}
+  \setbeamercolor{frametitle}{fg=white}
+  \setbeamercolor{title}{fg=white}
+  \setbeamercolor{subtitle}{fg=white}
+  \setbeamercolor{author}{fg=white}
+  \setbeamercolor{itemize item}{fg=white}
+  \setbeamercolor{itemize subitem}{fg=white}
+  \setbeamercolor{enumerate item}{fg=white}
+\else
+  % Light mode colors (default)
+  \setbeamercolor{normal text}{fg=black}
+  \setbeamercolor{frametitle}{fg=black}
+  \setbeamercolor{title}{fg=black}
+  \setbeamercolor{subtitle}{fg=black}
+  \setbeamercolor{author}{fg=black}
+  \setbeamercolor{itemize item}{fg=black}
+  \setbeamercolor{itemize subitem}{fg=black}
+  \setbeamercolor{enumerate item}{fg=black}
+\fi
 \usebeamercolor[fg]{normal text}
 
 \usepackage[utf8]{inputenc}

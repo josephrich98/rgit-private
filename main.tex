@@ -16,8 +16,10 @@
 \usepackage{xcolor}
 \usepackage[numbers,sort&compress]{natbib}
 
-% \pagecolor[rgb]{0.05,0.05,0.05} %black - background color
-% \color[rgb]{0.9,0.9,0.9} %grey - text color
+%%% see my comments with the '%%%' notation
+
+\pagecolor[rgb]{0.05,0.05,0.05} %black - background color
+\color[rgb]{0.9,0.9,0.9} %grey - text color
 
 
 \newcommand{\synfig}[1]{notebooks/figures/synthetic/gene_expression_synthetic/imaging_synthetic/#1}
@@ -140,6 +142,8 @@ isotropic-noise and known-parameter assumptions for practical fitting.
 
 \section{Marginal and joint laws}
 \label{sec:joint}
+
+%%% (G X) is the concatenation of the two modalities ie a vector in R^{p+d}.
 
 \begin{proposition}[Joint Gaussian law]
 \label{prop:joint}
@@ -298,7 +302,7 @@ Expanding the covariance,
 =
 \Cov(AG)+\Cov(\varepsilon),
 \]
-since the cross terms vanish by independence. Using
+since the cross terms vanish by independence. Using  %%% (1) a well-established identity; also, Cov(AG) is shorthand for Cov(AG, AG)
 \[
 \Cov(AG)=A\Sg A^\top,
 \]
@@ -366,12 +370,57 @@ B = \sigma^{-2}\, \Sgcx\, A\T .
 \end{proposition}
 
 \begin{proof}
-Equations~\eqref{eq:postmean}--\eqref{eq:postcov} are the standard Gaussian
-conditioning formulas applied to Proposition~\ref{prop:joint}. The precision
-form follows from the Woodbury identity:
-$\big(\Sg^{-1} + \sigma^{-2} A\T A\big)^{-1} = \Sg - \Sg A\T(A\Sg A\T + \sigma^2 I_d)^{-1} A \Sg$,
-and then $B = \Sg A\T \Sx^{-1} = \sigma^{-2}\Sgcx A\T$ by the push-through
-identity $\Sg A\T(A\Sg A\T+\sigma^2 I)^{-1} = (\Sg^{-1}+\sigma^{-2}A\T A)^{-1}\sigma^{-2}A\T$.
+We start from the joint law of Proposition~\ref{prop:joint}. For a jointly
+Gaussian pair with zero mean and blocks
+\[
+\begin{pmatrix} G\\ X \end{pmatrix}
+\sim
+\N\!\left(
+\mathbf{0},
+\begin{pmatrix}
+\Sg & \Sgx\\
+\Sxg & \Sx
+\end{pmatrix}
+\right),
+\]
+the standard Gaussian conditioning formulas state that $G \mid X$ is Gaussian with
+\[
+\E[G \mid X] = \Sgx\, \Sx^{-1} X,  %%% (2)
+\qquad
+\Cov(G \mid X) = \Sg - \Sgx\, \Sx^{-1}\, \Sxg .
+\]
+Substituting the blocks computed in Proposition~\ref{prop:joint}, namely
+$\Sgx = \Sg A\T$, $\Sxg = A\Sg$, and $\Sx = A\Sg A\T + \sigma^2 I_d$, gives
+\[
+\hat g(X) = \E[G \mid X] = \Sg A\T \big(A\Sg A\T + \sigma^2 I_d\big)^{-1} X,
+\]
+\[
+\Sgcx = \Sg - \Sg A\T \big(A\Sg A\T + \sigma^2 I_d\big)^{-1} A\Sg,
+\]
+which are \eqref{eq:postmean}--\eqref{eq:postcov}, and identifies the Bayes map
+$B = \Sg A\T \Sx^{-1}$.
+
+For the precision form, apply the Woodbury matrix identity
+\[
+\big(\Sg^{-1} + \sigma^{-2} A\T A\big)^{-1}
+= \Sg - \Sg A\T\big(\sigma^2 I_d + A\Sg A\T\big)^{-1} A\Sg .
+\]
+The right-hand side is exactly $\Sgcx$, so $\Sgcx^{-1} = \Sg^{-1} + \sigma^{-2} A\T A$;  %%% take the inverse of both sides of the equation above
+imaging contributes additively to the prior precision $\Sg^{-1}$.
+
+It remains to rewrite $B$. Multiply the push-through identity
+\[
+A\T\big(A\Sg A\T + \sigma^2 I_d\big)
+= \big(A\T A + \sigma^2\Sg^{-1}\big)\Sg A\T
+= \sigma^2\big(\Sg^{-1} + \sigma^{-2}A\T A\big)\Sg A\T
+\]
+on the right by $(A\Sg A\T + \sigma^2 I_d)^{-1}$ and on the left by
+$\sigma^{-2}(\Sg^{-1} + \sigma^{-2}A\T A)^{-1} = \sigma^{-2}\Sgcx$ to obtain
+\[
+\sigma^{-2}\Sgcx\, A\T
+= \Sg A\T\big(A\Sg A\T + \sigma^2 I_d\big)^{-1} = B .
+\]
+Hence $B = \sigma^{-2}\Sgcx A\T$, completing \eqref{eq:precision}.
 \end{proof}
 
 The estimator $\hat g(X) = BX$ is the Bayes-optimal predictor under squared-error
@@ -403,12 +452,47 @@ I(G; X) = \tfrac12 \sum_{i=1}^{r} \log\!\left(1 + \frac{\lambda_i}{\sigma^2}\rig
 \end{proposition}
 
 \begin{proof}
-For jointly Gaussian $(G,X)$,
-$I(G;X) = \tfrac12 \log\big(\det\Sg / \det\Sgcx\big)$~\citep{cover2006elements}. Substituting
-\eqref{eq:precision}, $\det \Sgcx = \det\Sg \,/ \det(I_p + \sigma^{-2}\Sg^{1/2}A\T A \Sg^{1/2})$,
-and Sylvester's determinant identity moves $A$ to the other side to give
-$\det(I_d + \sigma^{-2} A\Sg A\T)$. Diagonalizing $A\Sg A\T$ yields
-\eqref{eq:mi-diag}.
+For a jointly Gaussian pair the mutual information is the expected log-ratio of
+the posterior to the prior density of $G$; carrying out the Gaussian integral
+leaves only the determinants of the two covariances,  %%% (3)
+\[
+I(G;X)
+= \tfrac12 \log\frac{\det\Sg}{\det\Sgcx}
+\]
+\citep{cover2006elements}. We now express the ratio through the channel
+parameters. Taking determinants in the precision form  %%% (4)
+$\Sgcx^{-1} = \Sg^{-1} + \sigma^{-2} A\T A$ of \eqref{eq:precision} and factoring
+out $\Sg^{-1}$,
+\[
+\det \Sgcx^{-1}
+= \det\!\big(\Sg^{-1}\big)\,
+  \det\!\big(I_p + \sigma^{-2}\Sg^{1/2} A\T A\, \Sg^{1/2}\big),
+\]
+so that
+\[
+\frac{\det\Sg}{\det\Sgcx}
+= \det\Sg \cdot \det\Sgcx^{-1}  %%% the \det\Sg and upcoming \det\Sg^{-1} cancel
+= \det\!\big(I_p + \sigma^{-2}\Sg^{1/2} A\T A\, \Sg^{1/2}\big).
+\]
+%%% The rest of the proof is in (5)-(6)
+Sylvester's determinant identity $\det(I_p + PQ) = \det(I_d + QP)$, applied with
+$P = \sigma^{-2}\Sg^{1/2}A\T$ and $Q = A\Sg^{1/2}$, moves the factors past one
+another and replaces the $p\times p$ determinant by a $d\times d$ one,
+\[
+\det\!\big(I_p + \sigma^{-2}\Sg^{1/2} A\T A\, \Sg^{1/2}\big)
+= \det\!\big(I_d + \sigma^{-2} A\Sg A\T\big),
+\]
+which is \eqref{eq:mi}. Finally, let $A\Sg A\T = \sum_{i=1}^{r}\lambda_i w_i w_i\T$
+be the spectral decomposition of this symmetric positive-semidefinite matrix,
+with $\lambda_1\ge\cdots\ge\lambda_r>0$ its nonzero eigenvalues. Then
+$I_d + \sigma^{-2}A\Sg A\T$ has eigenvalues $1 + \lambda_i/\sigma^2$ (and $1$ on
+the orthogonal complement, contributing nothing), so its determinant is the
+product $\prod_{i=1}^{r}(1 + \lambda_i/\sigma^2)$ and  %%% (7)
+\[
+I(G;X) = \tfrac12 \log \prod_{i=1}^{r}\Big(1 + \frac{\lambda_i}{\sigma^2}\Big)
+= \tfrac12 \sum_{i=1}^{r} \log\!\Big(1 + \frac{\lambda_i}{\sigma^2}\Big),
+\]
+which is \eqref{eq:mi-diag}.
 \end{proof}
 
 Equation~\eqref{eq:mi-diag} is the cleanest reading of the model: each
@@ -465,17 +549,73 @@ I(G;X) = \tfrac12 \sum_i \log(1 + d_i^2) = -\tfrac12 \sum_i \log(1 - \rho_i^2).
 \end{proposition}
 
 \begin{proof}
-In whitened coordinates the likelihood is $X \mid U \sim \N(\sigma M U, \sigma^2 I_d)$,
-since $A G = A \Sg^{1/2} U = \sigma M U$. The posterior precision of $U$ is
-$I_p + \sigma^{-2}(\sigma M)\T(\sigma M) = I_p + M\T M = V (I_p + D^2) V\T$,
-so $\Var(U \mid X) = V(I_p + D^2)^{-1} V\T$ and
-$\Var(S_i \mid X) = v_i\T \Var(U\mid X) v_i = (1+d_i^2)^{-1}$, giving (i).
-For (ii), $\Cov(U, X) = \E[U(\sigma M U + \varepsilon)\T] = \sigma M\T$, so
-$\Cov(S_i, X) = \sigma v_i\T M\T = \sigma d_i u_i\T$. The matched imaging variate
-$T_i := u_i\T X$ has $\Var(T_i) = u_i\T \Sx u_i = \sigma^2(1 + d_i^2)$ (using
-$\Sx = \sigma^2(MM\T + I_d)$) and $\Cov(S_i, T_i) = \sigma d_i$, hence
-$\rho_i = \mathrm{corr}(S_i, T_i) = d_i/\sqrt{1+d_i^2}$. Part (iii) is immediate
-from $A\Sg A\T = \sigma^2 M M\T$ and $\det(I_d + MM\T) = \prod_i(1+d_i^2)$.
+Write the SVD as $M = U D V\T$ with $U\T U = I$, $V\T V = I$, and
+$D = \mathrm{diag}(d_1, d_2, \dots)$, so $V = [v_1, v_2, \dots]$ collects the
+right singular vectors and $u_i$ the left ones. Since $S_i = v_i\T U$ with
+$U \sim \N(0, I_p)$, the prior variance is $\Var(S_i) = v_i\T v_i = 1$.
+
+\emph{Posterior variance (i).} In whitened coordinates the mean readout is
+$AG = A\Sg^{1/2} U = \sigma M U$, so the likelihood is
+$X \mid U \sim \N(\sigma M U,\ \sigma^2 I_d)$. Applying the precision form
+\eqref{eq:precision} to the pair $(U, X)$ --- whose prior covariance is $I_p$ and
+whose transfer matrix is $\sigma M$ with noise $\sigma^2 I_d$ --- the posterior
+precision of $U$ is
+\[
+\Var(U \mid X)^{-1}
+= I_p + \sigma^{-2}(\sigma M)\T(\sigma M)
+= I_p + M\T M
+= V\,(I_p + D^2)\,V\T,
+\]
+using $M\T M = V D^2 V\T$. Inverting and applying $V\T V = I_p$,
+\[
+\Var(U \mid X) = V\,(I_p + D^2)^{-1} V\T,
+\]
+and therefore
+\[
+\Var(S_i \mid X)
+= v_i\T \Var(U \mid X)\, v_i
+= \big[(I_p + D^2)^{-1}\big]_{ii}
+= \frac{1}{1 + d_i^2},
+\]
+since the $v_i$ are orthonormal. This proves (i).
+
+\emph{Canonical correlation (ii).} The cross-covariance of the whitened genomics
+with imaging is
+\[
+\Cov(U, X) = \E\!\big[U\,(\sigma M U + \varepsilon)\T\big]
+= \sigma\,\E[U U\T]\,M\T + \E[U\varepsilon\T]
+= \sigma M\T,
+\]
+using $\E[UU\T] = I_p$ and $U\perp\varepsilon$. Hence
+$\Cov(S_i, X) = v_i\T \Cov(U, X) = \sigma v_i\T M\T = \sigma d_i u_i\T$, the last
+step because $v_i\T M\T = (M v_i)\T = (d_i u_i)\T$ from the SVD. Pair $S_i$ with the matched imaging variate
+$T_i := u_i\T X$. From $\Sx = \sigma^2(MM\T + I_d)$ (Proposition~\ref{prop:joint}
+in whitened form) and $M M\T u_i = d_i^2 u_i$,
+\[
+\Var(T_i) = u_i\T \Sx u_i = \sigma^2\big(u_i\T M M\T u_i + 1\big)
+= \sigma^2(1 + d_i^2),
+\]
+while $\Cov(S_i, T_i) = \Cov(S_i, X)\, u_i = \sigma d_i u_i\T u_i = \sigma d_i$.
+The correlation is therefore
+\[
+\rho_i = \mathrm{corr}(S_i, T_i)
+= \frac{\Cov(S_i, T_i)}{\sqrt{\Var(S_i)\,\Var(T_i)}}
+= \frac{\sigma d_i}{\sqrt{1}\,\sqrt{\sigma^2(1+d_i^2)}}
+= \frac{d_i}{\sqrt{1 + d_i^2}},
+\]
+and rearranging gives $d_i^2 = \rho_i^2/(1-\rho_i^2)$, proving (ii).
+
+\emph{Connection to the eigenvalues (iii).} From $M = \sigma^{-1}A\Sg^{1/2}$ we
+get $A\Sg A\T = \sigma^2 M M\T$, whose nonzero eigenvalues are $\sigma^2 d_i^2$;
+comparing with the $\lambda_i$ of Proposition~\ref{prop:mi} gives
+$\lambda_i = \sigma^2 d_i^2$, i.e.\ $\lambda_i/\sigma^2 = d_i^2$. Substituting into
+\eqref{eq:mi-diag} and using $1 + d_i^2 = 1/(1-\rho_i^2)$ from (ii),
+\[
+I(G;X)
+= \tfrac12 \sum_i \log(1 + d_i^2)
+= -\tfrac12 \sum_i \log(1 - \rho_i^2),
+\]
+which is (iii).
 \end{proof}
 
 Part (i) gives the headline identity. Define the recoverability of a genomic
@@ -548,20 +688,56 @@ and $X$, and $\max_v R(v) = \rho_1^2$.
 \end{proposition}
 
 \begin{proof}
-\eqref{eq:gevp} is the first-order condition of the Rayleigh quotient
-\eqref{eq:varproblem}. Substitute $v = \Sg^{-1/2} w$ and $\Sgx = \Sg A\T$; the
-generalized eigenproblem becomes the ordinary one
-$\Sg^{1/2} A\T \Sx^{-1} A \Sg^{1/2}\, w = \mu\, w$. Now $A \Sg^{1/2} = \sigma M$
-and $\Sx = \sigma^2(MM\T + I_d)$, so
-\begin{equation*}
-\Sg^{1/2} A\T \Sx^{-1} A \Sg^{1/2}
-= \sigma M\T \cdot \sigma^{-2}(MM\T + I_d)^{-1} \cdot \sigma M
+Write $C := \Sgx \Sx^{-1} \Sxg$ for the (symmetric positive-semidefinite)
+numerator matrix, so the objective is the generalized Rayleigh quotient
+$R(v) = v\T C v / v\T \Sg v$. Setting its gradient to zero,
+\[
+\nabla_v R(v)
+= \frac{2 C v\,(v\T\Sg v) - 2\Sg v\,(v\T C v)}{(v\T\Sg v)^2} = 0
+\quad\Longleftrightarrow\quad
+C v = \frac{v\T C v}{v\T \Sg v}\,\Sg v = \mu\,\Sg v,
+\]
+with $\mu = R(v)$ the value of the quotient at the stationary point. This is the
+generalized eigenproblem \eqref{eq:gevp}.
+
+To solve it, whiten via $v = \Sg^{-1/2} w$. Left-multiplying \eqref{eq:gevp} by
+$\Sg^{-1/2}$ and inserting $\Sg^{-1/2}\Sg^{1/2} = I$ turns it into the ordinary
+symmetric eigenproblem
+\[
+\big(\Sg^{-1/2} C\, \Sg^{-1/2}\big)\, w = \mu\, w .
+\]
+Now expand $C$. Using $\Sgx = \Sg A\T$ and $\Sxg = A\Sg$,
+\[
+\Sg^{-1/2} C\, \Sg^{-1/2}
+= \Sg^{-1/2}\,(\Sg A\T)\,\Sx^{-1}\,(A\Sg)\,\Sg^{-1/2}
+= \big(\Sg^{1/2} A\T\big)\,\Sx^{-1}\,\big(A\Sg^{1/2}\big).
+\]
+Substituting $A\Sg^{1/2} = \sigma M$ and $\Sx = \sigma^2(MM\T + I_d)$,
+\[
+\Sg^{1/2} A\T\, \Sx^{-1}\, A\Sg^{1/2}
+= (\sigma M\T)\cdot \sigma^{-2}(MM\T + I_d)^{-1} \cdot (\sigma M)
 = M\T (MM\T + I_d)^{-1} M .
-\end{equation*}
-With the SVD $M = U D V\T$ this equals $V\, D^2 (D^2 + I)^{-1}\, V\T$, whose
-eigenvalues are $d_i^2/(1+d_i^2) = \rho_i^2$ with eigenvectors $v_i$. Hence
-$w = v_i$ and $v = \Sg^{-1/2} v_i = a_i$; the $\Sg$-orthonormality
-$a_i\T \Sg a_j = v_i\T v_j = \delta_{ij}$ is immediate.
+\]
+Insert the SVD $M = U D V\T$. Then $MM\T + I_d = U D^2 U\T + I_d$, and on the
+range of $U$ its inverse acts as $U(D^2+I)^{-1}U\T$, so
+\[
+M\T(MM\T + I_d)^{-1} M
+= V D U\T \cdot U (D^2 + I)^{-1} U\T \cdot U D V\T
+= V\, D^2 (D^2 + I)^{-1}\, V\T,
+\]
+using $U\T U = I$. This is an eigendecomposition: the eigenvalues are
+$d_i^2/(1+d_i^2)$ with eigenvectors $w = v_i$. By Proposition~\ref{prop:canonical}(ii)
+these eigenvalues equal $\rho_i^2$, so $\mu_i = \rho_i^2$ and the leading value is
+$\max_v R(v) = \mu_1 = \rho_1^2$.
+
+Undoing the whitening, the genomic eigenvector is $v = \Sg^{-1/2} w = \Sg^{-1/2} v_i = a_i$,
+the canonical direction of Proposition~\ref{prop:canonical}. Finally, the
+$\Sg$-orthonormality follows because the $v_i$ are orthonormal:
+\[
+a_i\T \Sg\, a_j
+= (\Sg^{-1/2} v_i)\T \Sg\, (\Sg^{-1/2} v_j)
+= v_i\T v_j = \delta_{ij}.
+\]
 \end{proof}
 
 So the deliverable of the analysis is a \emph{recoverability spectrum}

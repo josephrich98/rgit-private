@@ -21,15 +21,23 @@ def run_fastsurfer(
     output_dir,
     license_file=None,
     threads=8,
+    tag="latest",
     seg_only=True,
+    overwrite=False
 ):
     input_file = Path(input_file).resolve()
     output_dir = Path(output_dir).resolve()
+
+    os.makedirs(output_dir, exist_ok=True)
 
     subject_id = input_file.name
     subject_id = subject_id.replace(".nii.gz", "")
     subject_id = subject_id.replace(".nii", "")
     subject_id = subject_id.replace(".mgz", "")
+
+    if os.path.exists(output_dir / subject_id) and not overwrite:
+        print(f"Output directory already exists, skipping: {output_dir}")
+        return
 
     docker_cmd = [
         "docker",
@@ -54,7 +62,7 @@ def run_fastsurfer(
             f"{license_file.parent}:/fs_license",
         ])
 
-    docker_cmd.append("deepmi/fastsurfer:latest")
+    docker_cmd.append(f"deepmi/fastsurfer:{tag}")
 
     docker_cmd.extend([
         "--t1",
@@ -102,7 +110,7 @@ def main():
 
     parser.add_argument(
         "-l", "--license_file",
-        default=os.getenv("FREESURFER_HOME") + "/license.txt",
+        default=os.getenv("FREESURFER_HOME") + "/license.txt" if os.getenv("FREESURFER_HOME") else None,
         help="FreeSurfer license file (optional if using --seg_only)",
     )
 
@@ -110,6 +118,12 @@ def main():
         "-t", "--threads",
         type=int,
         default=8,
+    )
+
+    parser.add_argument(
+        "--tag",
+        default="latest",
+        help="Docker tag for the FastSurfer image",
     )
 
     parser.add_argument(
@@ -122,7 +136,7 @@ def main():
 
     input_files = find_nifti_files(args.input_dir)
 
-    if not os.path.exists(args.license_file) and args.full:
+    if (not args.license_file or not os.path.exists(args.license_file)) and args.full:
         raise FileNotFoundError(f"License file not found: {args.license_file}")
 
     print(f"Found {len(input_files)} MRI files")
@@ -135,6 +149,7 @@ def main():
             output_dir=args.output_dir,
             license_file=args.license_file,
             threads=args.threads,
+            tag=args.tag,
             seg_only=not args.full,
         )
 

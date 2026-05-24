@@ -25,6 +25,7 @@
 \newcommand{\synfig}[1]{notebooks/figures/synthetic/gene_expression_synthetic/imaging_synthetic/#1}
 \newcommand{\kircfig}[1]{notebooks/figures/tcga_kirc/gene_expression/organ_radiomics/#1}
 \newcommand{\nsclcfig}[1]{notebooks/figures/nsclc/gene_expression/organ_radiomics_subset/#1}
+\newcommand{\adnifig}[1]{notebooks/figures/adni/gene_expression/fastsurfer/#1}
 
 \newtheorem{proposition}{Proposition}
 \newtheorem{definition}{Definition}
@@ -520,8 +521,8 @@ $\tfrac12 \log(1 + d_i^2)$ in bits; the dashed line is the cumulative total.}
 \label{sec:canonical}
 
 The eigenvalues $\lambda_i$ are most interpretable after whitening. Define the
-whitened genomic variable $U = \Sg^{-1/2} G \sim \N(0, I_p)$ and the
-\emph{whitened transfer operator}
+whitened genomic variable $\tilde{G} = \Sg^{-1/2} G \sim \N(0, I_p)$ and the
+\emph{whitened transfer operator}  %%% the matrix that maps $\tilde{G}$ (whitened G) to the mean of X (i.e., the updated version of A in the whitened coordinates)
 \begin{equation}
 M := \sigma^{-1} A\, \Sg^{1/2} \in \R^{d \times p},
 \qquad
@@ -534,7 +535,7 @@ values $d_1 \ge d_2 \ge \cdots \ge 0$.
 \begin{proposition}[Canonical decomposition of recoverability]
 \label{prop:canonical}
 With $M$ as in \eqref{eq:M}, define the genomic canonical direction
-$a_i := \Sg^{-1/2} v_i$ and the canonical score $S_i := a_i\T G = v_i\T U$. Then:
+$a_i := \Sg^{-1/2} v_i$ and the canonical score $S_i := a_i\T G = v_i\T \tilde{G}$. Then:
 \begin{enumerate}
 \item[(i)] $S_i$ has prior variance $1$ and posterior variance
 $\Var(S_i \mid X) = (1 + d_i^2)^{-1}$;
@@ -551,29 +552,29 @@ I(G;X) = \tfrac12 \sum_i \log(1 + d_i^2) = -\tfrac12 \sum_i \log(1 - \rho_i^2).
 \begin{proof}
 Write the SVD as $M = U D V\T$ with $U\T U = I$, $V\T V = I$, and
 $D = \mathrm{diag}(d_1, d_2, \dots)$, so $V = [v_1, v_2, \dots]$ collects the
-right singular vectors and $u_i$ the left ones. Since $S_i = v_i\T U$ with
-$U \sim \N(0, I_p)$, the prior variance is $\Var(S_i) = v_i\T v_i = 1$.
+right singular vectors and $u_i$ the left ones. Since $S_i = v_i\T \tilde{G}$ with
+$\tilde{G} \sim \N(0, I_p)$, the prior variance is $\Var(S_i) = v_i\T v_i = 1$.  %%% recall I defined S_i this way in the proposition (S_i is the whitened genomics projected onto singular direction v_i); also, for any random vector X with covariance matrix Σ, the variance of a linear projection a^T X is a^T Σ a -- (8) --, so here we have v_i^T I v_i = v_i^T v_i = 1 since the v_i are orthonormal (and therefore unit length).
 
 \emph{Posterior variance (i).} In whitened coordinates the mean readout is
-$AG = A\Sg^{1/2} U = \sigma M U$, so the likelihood is
-$X \mid U \sim \N(\sigma M U,\ \sigma^2 I_d)$. Applying the precision form
-\eqref{eq:precision} to the pair $(U, X)$ --- whose prior covariance is $I_p$ and
+$AG = A\Sg^{1/2} \tilde{G} = \sigma M \tilde{G}$, so the likelihood is
+$X \mid \tilde{G} \sim \N(\sigma M \tilde{G},\ \sigma^2 I_d)$. Applying the precision form
+\eqref{eq:precision} to the pair $(\tilde{G}, X)$ --- whose prior covariance is $I_p$ and
 whose transfer matrix is $\sigma M$ with noise $\sigma^2 I_d$ --- the posterior
-precision of $U$ is
+precision of $\tilde{G}$ is  %%% For a Gaussian linear model, Σpost−1​=Σprior−1​+A⊤Σε−1​A -- this is well-established
 \[
-\Var(U \mid X)^{-1}
+\Var(\tilde{G} \mid X)^{-1}
 = I_p + \sigma^{-2}(\sigma M)\T(\sigma M)
-= I_p + M\T M
-= V\,(I_p + D^2)\,V\T,
+= I_p + M\T M  %%% the σ^2 cancels out
+= V\,(I_p + D^2)\,V\T,  %%% the last step is because M^T M = (V D U^T) (U D V^T) = V D^2 V^T since U^T U = I (an important SVD identity)
 \]
 using $M\T M = V D^2 V\T$. Inverting and applying $V\T V = I_p$,
 \[
-\Var(U \mid X) = V\,(I_p + D^2)^{-1} V\T,
+\Var(\tilde{G} \mid X) = V\,(I_p + D^2)^{-1} V\T,
 \]
 and therefore
 \[
 \Var(S_i \mid X)
-= v_i\T \Var(U \mid X)\, v_i
+= v_i\T \Var(\tilde{G} \mid X)\, v_i
 = \big[(I_p + D^2)^{-1}\big]_{ii}
 = \frac{1}{1 + d_i^2},
 \]
@@ -582,12 +583,12 @@ since the $v_i$ are orthonormal. This proves (i).
 \emph{Canonical correlation (ii).} The cross-covariance of the whitened genomics
 with imaging is
 \[
-\Cov(U, X) = \E\!\big[U\,(\sigma M U + \varepsilon)\T\big]
-= \sigma\,\E[U U\T]\,M\T + \E[U\varepsilon\T]
+\Cov(\tilde{G}, X) = \E\!\big[\tilde{G}\,(\sigma M \tilde{G} + \varepsilon)\T\big]
+= \sigma\,\E[\tilde{G} \tilde{G}\T]\,M\T + \E[\tilde{G}\varepsilon\T]
 = \sigma M\T,
 \]
-using $\E[UU\T] = I_p$ and $U\perp\varepsilon$. Hence
-$\Cov(S_i, X) = v_i\T \Cov(U, X) = \sigma v_i\T M\T = \sigma d_i u_i\T$, the last
+using $\E[\tilde{G}\tilde{G}\T] = I_p$ and $\tilde{G}\perp\varepsilon$. Hence
+$\Cov(S_i, X) = v_i\T \Cov(\tilde{G}, X) = \sigma v_i\T M\T = \sigma d_i u_i\T$, the last
 step because $v_i\T M\T = (M v_i)\T = (d_i u_i)\T$ from the SVD. Pair $S_i$ with the matched imaging variate
 $T_i := u_i\T X$. From $\Sx = \sigma^2(MM\T + I_d)$ (Proposition~\ref{prop:joint}
 in whitened form) and $M M\T u_i = d_i^2 u_i$,
@@ -1255,9 +1256,11 @@ into a single coherent recoverability calculation.
 \label{sec:kirc}
 \label{sec:tcga-kirc}
 
-We now instantiate the framework on two real radiogenomic cohorts ---
-TCGA-KIRC (clear-cell renal cell carcinoma)~\citep{ricketts2018tcgakirc} and a
-non--small-cell lung cancer (NSCLC) cohort~\citep{bakr2018nsclcradiogenomics}
+We now instantiate the framework on three real radiogenomic cohorts ---
+TCGA-KIRC (clear-cell renal cell carcinoma)~\citep{ricketts2018tcgakirc}, a
+non--small-cell lung cancer (NSCLC) cohort~\citep{bakr2018nsclcradiogenomics},
+and ADNI (Alzheimer's Disease Neuroimaging Initiative)~\citep{petersen2010adni},
+spanning two tumour cohorts and a non-oncologic brain cohort
 --- to demonstrate how the recoverability spectrum, the cross-validated and
 permutation-calibrated diagnostics of Section~\ref{sec:estimation-honest}, and
 the dimensional-collapse warnings of Section~\ref{sec:estimation-regimes}
@@ -1591,14 +1594,162 @@ but a genuine biological radiogenomic association rather than an acquisition
 artefact. (Tube voltage and dose were unavailable in the headers and so are
 uncontrolled.)
 
-The contrast is the useful object. Two cohorts, the same model, estimator, and
-working-dimension rule yield a borderline single direction
-($\hat R^{\mathrm{cv}}\approx 0.1$) in clear-cell RCC and a solid single
-direction ($\hat R^{\mathrm{cv}}\approx 0.33$) in NSCLC. The recoverable
-dimension is a property of the biology--imaging channel
-(Proposition~\ref{prop:rank}), and these two channels differ in strength while
-sharing the same low rank --- exactly the regime the model is built to
-quantify.
+\section{Application: ADNI}
+\label{sec:adni}
+
+The two tumour cohorts pair a localized lesion with a matched tissue genomic
+assay. ADNI is a deliberately different test: structural brain
+MRI~\citep{petersen2010adni} against \emph{whole-blood} Affymetrix microarray
+expression, a non-oncologic cohort where any imaging--genomics channel must run
+through systemic rather than local biology. It is also by far the largest
+cohort we analyze ($n = 702$), which lets the sample-complexity sweep show a
+clean scaling law rather than a flat band.
+
+\paragraph{Imaging
+(\texttt{run\_fastsurfer.py} $\to$ \texttt{build\_adni\_fastsurfer\_features.py}).}
+Each T1 volume is processed with
+FastSurfer~\citep{henschel2020fastsurfer}, the deep-learning FreeSurfer
+surrogate, yielding a DKT-atlas segmentation (\texttt{aparc.DKTatlas+aseg}) and
+the bias-field-corrected conformed volume (\texttt{orig\_nu.mgz}). We build a
+$d_{\mathrm{native}} = 1022$ imaging panel per subject from two families:
+(i)~\emph{morphometry} --- volume and intensity summaries for every segmented
+region from the standard \texttt{aseg+DKT.stats} table ($380$ features); and
+(ii)~\emph{texture/shape} --- the full PyRadiomics panel
+(shape, first-order, GLCM/GLRLM/GLSZM/GLDM/NGTDM;
+\citealp{vangriethuysen2017pyradiomics}) extracted from \texttt{orig\_nu.mgz}
+within each of six bilateral regions most affected in Alzheimer's
+disease~\citep{braak1991staging}: hippocampus, entorhinal cortex, fusiform
+gyrus, inferior temporal gyrus, precuneus, and posterior cingulate
+($642$ features). Stacking gives
+\texttt{data/adni/imaging/fastsurfer.h5ad}, keyed by ADNI subject ID.
+
+\paragraph{Genomics (\texttt{make\_genomics\_matrix.py}).}
+ADNI gene expression is Affymetrix Human Gene microarray, already normalized to
+log-scale intensities; we therefore disable the count-oriented CPM and second
+$\log_{1+}$ steps and reduce to the top $2000$ HVGs before the Gaussian-copula
+transform. Intersecting on subject ID retains $n = 702$ subjects with
+$p_{\mathrm{native}} = 2000$ transcripts and $d_{\mathrm{native}} = 1022$
+imaging features, PCA-reduced symmetrically to
+$p^\star = d^\star = \lfloor n/5 \rfloor = 140$
+($\kappa_G + \kappa_X = 280/702 \approx 0.40$, the same high-dimensional regime
+as the tumour cohorts).
+
+\subsection{The recoverability spectrum and its null}
+\label{sec:adni-spectrum}
+Fitting copula-regularized CCA returns an in-sample leading correlation
+$\hat\rho_1 = 0.87$ ($\hat R_1 = 0.76$) and $7.1$ bits of in-sample MI over $12$
+components. The honest spectrum is the strongest of the three cohorts:
+$5$-fold cross-validation gives a leading recoverability
+$\hat R_1^{\mathrm{cv}} = 0.37$ and a clearly resolved second direction
+$\hat R_2^{\mathrm{cv}} = 0.12$, with the remainder collapsing to $\approx 0$
+(Fig.~\ref{fig:adni-spectrum}). The permutation null is well-separated
+($\hat\rho_1^{\mathrm{null}}$ mean $0.76$, $95\%$ quantile $0.77$) and the top
+three observed correlations all clear it at $p \approx 0.005$. The
+\emph{effective image-identifiable rank}, defined by cross-validated $\hat
+R_i^{\mathrm{cv}}$ exceeding its own per-component permutation null, is
+$\hat k_{\mathrm{eff}} = 2$ --- the only cohort here where imaging resolves more
+than a single genomic direction. The result is stable across the preprocessing
+grid (HVG method $\times$ $3$ seeds, $6$ configurations): all permutation
+$p < 0.05$, leading $\hat R^{\mathrm{cv}}$ median $0.37$ (range $0.30$--$0.43$),
+and $\hat k_{\mathrm{eff}}$ median $2$ (range $2$--$3$).
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\adnifig{cv_recoverability.pdf}}
+\caption{Recoverability spectrum on ADNI ($n=702$, FastSurfer
+morphometry $+$ PyRadiomics, copula marginals). The honest cross-validated
+spectrum (blue) resolves \emph{two} genomic directions
+($\hat R_1^{\mathrm{cv}} = 0.37$, $\hat R_2^{\mathrm{cv}} = 0.12$) above the
+permutation null before collapsing --- the strongest and highest-rank channel
+of the three cohorts (compare Figs.~\ref{fig:kirc-spectrum},
+\ref{fig:nsclc-spectrum}).}
+\label{fig:adni-spectrum}
+\end{figure}
+
+\subsection{Information budget and sample-complexity scaling}
+\label{sec:adni-sweep}
+The observed cumulative mutual information over the top three components is
+$2.38$ bits, sitting \emph{above} the permutation band (null mean $1.75$ bits,
+$95\%$ upper limit $1.82$ bits): unlike KIRC, where the observed value merely
+touched the upper edge of the null, here the channel is detected rather than
+bounded. Because ADNI is large, subsampling to
+$n \in \{50, 211, 351, 491, 597, 702\}$ traces a genuine scaling law rather than
+the flat band seen in KIRC (Fig.~\ref{fig:adni-sweep}): the honest $\hat
+R_1^{\mathrm{cv}}$ climbs monotonically from $0.13$ at $n=50$ to a plateau of
+$\approx 0.35$ by $n \approx 500$, while the in-sample $\hat\rho_1^2$ stays
+pinned near the Wachter detection edge ($\approx 0.64$) throughout. The leading
+direction lives \emph{below} that in-sample edge at every $n$ and is visible
+only through cross-validation and permutation --- the same lesson as the tumour
+cohorts, but here the honest signal is large enough that even a few hundred
+subjects suffice to register it cleanly.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\adnifig{sample_complexity_sweep.pdf}}
+\caption{Sample-complexity sweep on ADNI. The honest $\hat R_1^{\mathrm{cv}}$
+(blue squares) rises monotonically with cohort size to a plateau near $0.35$,
+in contrast to the trendless KIRC band (Fig.~\ref{fig:kirc-sweep}); the
+in-sample $\hat\rho_1^2$ (grey) hugs the Wachter edge (green) and the
+permutation $95\%$ null (red) throughout.}
+\label{fig:adni-sweep}
+\end{figure}
+
+\subsection{Per-gene non-linear validation}
+\label{sec:adni-pergene}
+The recoverability ordering predicts gene-level decodability. Ranking
+transcripts by model recoverability $R(e_j)$, median-binarizing the five
+highest- and five lowest-ranked, and training $L_2$-logistic and random-forest
+classifiers to predict expression status from the imaging PCs ($5$-fold CV)
+gives a clean separation, sharper than in either tumour cohort:
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+group               & mean AUC (logistic) & mean AUC (RF) \\
+\midrule
+image-identifiable  & $0.853$ & $0.848$ \\
+non-identifiable    & $0.483$ & $0.480$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The image-identifiable transcripts are decodable from brain morphometry at
+AUC $\approx 0.85$ while the non-identifiable controls sit at chance, and the
+random forest does not exceed the linear ceiling --- exactly the falsifiable
+pattern the recoverability score predicts (Fig.~\ref{fig:adni-pergene}).
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\adnifig{per_gene_auc.pdf}}
+\caption{Per-gene predictability on ADNI. Five high- and five
+low-recoverability transcripts, two classifiers, $5$-fold CV. The
+high-recoverability group reaches AUC $\approx 0.85$; the low-recoverability
+group sits at the $0.5$ chance line.}
+\label{fig:adni-pergene}
+\end{figure}
+
+\paragraph{Demographic mediation.}
+A blood-to-brain channel of this strength warrants the same skepticism we
+applied to the NSCLC scanner confound. Age and sex are powerful common causes
+here: both drive regional brain atrophy (hippocampal and entorhinal volume in
+particular) and systemic whole-blood expression, so a substantial part of the
+$\hat R_1^{\mathrm{cv}} = 0.37$ channel is very likely age/sex-mediated rather
+than a direct molecular readout, and the leading imaging loadings fall on
+exactly the medial-temporal regions that track age and disease stage. ADNI
+demographic and diagnostic covariates were not available in the processed
+matrices used here, so --- unlike the NSCLC batch analysis --- we do not report
+a demographic-residualized estimate; we therefore read the ADNI channel as a
+genuine but largely demographically mediated association, and flag the
+age/sex-deconfounded recoverability as the key open quantity for this cohort.
+
+The contrast across cohorts is the useful object. Three cohorts, the same
+model, estimator, and working-dimension rule yield a borderline single
+direction ($\hat R^{\mathrm{cv}}\approx 0.1$, $\hat k_{\mathrm{eff}}=1$) in
+clear-cell RCC, a solid single direction
+($\hat R^{\mathrm{cv}}\approx 0.33$, $\hat k_{\mathrm{eff}}=1$) in NSCLC, and a
+strong rank-two channel ($\hat R_1^{\mathrm{cv}}\approx 0.37$,
+$\hat k_{\mathrm{eff}}=2$) in ADNI. The recoverable dimension is a property of
+the biology--imaging channel (Proposition~\ref{prop:rank}); these three
+channels differ in both strength and rank while obeying the same estimation
+geometry --- exactly the regime the model is built to quantify.
 
 \appendix
 \section{Symbol reference}
@@ -1614,6 +1765,7 @@ $\Sg, \Sx, \Sgx$ & genomic / imaging / cross covariance\\
 $\Sgcx$ & posterior covariance of $G$ given $X$ (recoverability floor)\\
 $B = \Sgx \Sx^{-1}$ & Bayes-optimal linear map $x \mapsto \E[g\mid x]$\\
 $M = \sigma^{-1} A \Sg^{1/2}$ & whitened transfer operator; $d_i$ its singular values\\
+$\tilde{G} = \Sg^{-1/2} G$ & whitened genomic vector\\
 $\rho_i,\ R_i = \rho_i^2$ & $i$-th canonical correlation / recoverability\\
 $a_i,\ b_i$ & $i$-th canonical genomic / imaging direction\\
 $R(v)$ & recoverability score of a named genomic direction $v$\\

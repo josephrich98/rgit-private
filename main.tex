@@ -13,6 +13,7 @@
 \usepackage{nicefrac}
 \usepackage{microtype}
 \usepackage{graphicx}
+\usepackage{subcaption}
 \usepackage{xcolor}
 \usepackage[numbers,sort&compress]{natbib}
 
@@ -1589,17 +1590,48 @@ The reading is consistent: one genomic direction is robustly image-identifiable
 above chance, carrying a small but real cross-validated recoverability of order
 $0.1$, with no evidence for more than one or two.
 
-\begin{figure}[h]
+\begin{figure}[tbp]
 \centering
-\includegraphics[width=0.85\linewidth]{\kircfig{cv_recoverability.pdf}}
-\caption{Recoverability spectrum on TCGA-KIRC (organ radiomics, copula
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\kircfig{cv_recoverability.pdf}}
+\caption{}\label{fig:kirc-spectrum}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\kircfig{mi_upper_bound.pdf}}
+\caption{}\label{fig:kirc-ucb}
+\end{subfigure}
+
+\vspace{1.2em}
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\kircfig{sample_complexity_sweep.pdf}}
+\caption{}\label{fig:kirc-sweep}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\kircfig{per_gene_auc.pdf}}
+\caption{}\label{fig:kirc-pergene}
+\end{subfigure}
+\caption{TCGA-KIRC results.
+\textbf{(a)} Recoverability spectrum (organ radiomics, copula
 marginals). In-sample $\hat R_i$ (grey) is biased upward by the
 high-dimensional geometry; cross-validated $\hat R_i$ (blue, $5$-fold) is a
 small positive residual whose leading component is permutation-significant
 across preprocessing variants. The NSCLC leading direction
-(Fig.~\ref{fig:nsclc-spectrum}) is of similar magnitude but, unlike KIRC's, does
-not generalize or survive de-confounding at full $n$.}
-\label{fig:kirc-spectrum}
+(Fig.~\ref{fig:nsclc}) is of similar magnitude but, unlike KIRC's, does
+not generalize or survive de-confounding at full $n$.
+\textbf{(b)} Cumulative-MI null distribution (top-$3$ canonical components).
+The observed value (red) sits at the upper edge of the null bulk;
+the dashed line marks the $95\%$ upper confidence limit on $I(G;X)$ used
+in~\eqref{eq:kirc-ucl}.
+\textbf{(c)} Sample-complexity sweep. Honest $\hat R_1^{\mathrm{cv}}$
+(blue squares) stays in a low band ($\approx 0.04$--$0.17$) across cohort
+sizes without a clear trend; in-sample $\hat\rho_1^2$ (grey) is dominated by
+the high-dimensional bulk; the permutation $95\%$ null (red triangles) and
+Wachter edge (green crosses) sit above the honest recoverability at every $n$.
+\textbf{(d)} Per-gene predictability. Five high-recoverability and
+five low-recoverability genes, two classifiers, $5$-fold CV. The
+high-recoverability bars clear the chance line at $0.5$; the
+low-recoverability bars do not.}
+\label{fig:kirc}
 \end{figure}
 
 \subsection{An empirical upper bound on $I(G;X)$}
@@ -1621,16 +1653,6 @@ an order of magnitude tighter than the $21$-bit bound the saturating deep
 embedding admits. The observed cumulative MI is $1.59$ bits, sitting at the
 upper edge of the null (mean $0.82$ bits in nats $\to$ bits) --- the same
 borderline-positive picture as the spectrum.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.75\linewidth]{\kircfig{mi_upper_bound.pdf}}
-\caption{Cumulative-MI null distribution (top-$3$ canonical components) on
-TCGA-KIRC. The observed value (red) sits at the upper edge of the null bulk;
-the dashed line marks the $95\%$ upper confidence limit on $I(G;X)$ used
-in~\eqref{eq:kirc-ucl}.}
-\label{fig:kirc-ucb}
-\end{figure}
 
 The \emph{effective image-identifiable rank} of
 Section~\ref{sec:estimation-honest} --- components whose cross-validated
@@ -1661,17 +1683,6 @@ $n \gtrsim 25\,p^\star$ quoted in Section~\ref{sec:estimation-regimes}: a
 larger cohort, or a smaller fixed working dimension, would be needed to lift
 this direction cleanly above the in-sample bulk.
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.85\linewidth]{\kircfig{sample_complexity_sweep.pdf}}
-\caption{Sample-complexity sweep on TCGA-KIRC. Honest $\hat R_1^{\mathrm{cv}}$
-(blue squares) stays in a low band ($\approx 0.04$--$0.17$) across cohort
-sizes without a clear trend; in-sample $\hat\rho_1^2$ (grey) is dominated by
-the high-dimensional bulk; the permutation $95\%$ null (red triangles) and
-Wachter edge (green crosses) sit above the honest recoverability at every $n$.}
-\label{fig:kirc-sweep}
-\end{figure}
-
 \subsection{Per-gene non-linear validation}
 \label{sec:kirc-pergene}
 The recoverability spectrum makes a sharp, falsifiable prediction: genes
@@ -1697,16 +1708,6 @@ chance (AUC $\approx 0.65$) while the non-identifiable group sits at $0.5$, and
 the random forest does not materially exceed the logistic ceiling --- a direct,
 gene-level corroboration that the recoverability score, not gene identity per
 se, governs what imaging can read out (Fig.~\ref{fig:kirc-pergene}).
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.85\linewidth]{\kircfig{per_gene_auc.pdf}}
-\caption{Per-gene predictability on TCGA-KIRC. Five high-recoverability and
-five low-recoverability genes, two classifiers, $5$-fold CV. The
-high-recoverability bars clear the chance line at $0.5$; the
-low-recoverability bars do not.}
-\label{fig:kirc-pergene}
-\end{figure}
 
 \subsection{Implications}
 \label{sec:kirc-implications}
@@ -1809,7 +1810,7 @@ marginals). The leading cross-validated $\hat R_1^{\mathrm{cv}} \approx 0.11$
 (blue) is only marginally above the permutation null and, unlike at small $n$,
 does not generalize: the held-out $R^2$ of the leading direction is negative and
 the channel fails de-confounding.}
-\label{fig:nsclc-spectrum}
+\label{fig:nsclc}
 \end{figure}
 
 \paragraph{De-confounding controls confirm the failure.}
@@ -1899,17 +1900,61 @@ grid (HVG method $\times$ $3$ seeds, $6$ configurations): all permutation
 $p < 0.05$, leading $\hat R^{\mathrm{cv}}$ median $0.31$ (range $0.28$--$0.36$),
 and $\hat k_{\mathrm{eff}}$ consistently $2$.
 
-\begin{figure}[h]
+\begin{figure}[tbp]
 \centering
-\includegraphics[width=0.85\linewidth]{\adnifig{cv_recoverability.pdf}}
-\caption{Recoverability spectrum on ADNI ($n=702$, FastSurfer
-morphometry $+$ PyRadiomics, copula marginals). The honest cross-validated
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\adnifig{cv_recoverability.pdf}}
+\caption{}\label{fig:adni-spectrum}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\adnifig{sample_complexity_sweep.pdf}}
+\caption{}\label{fig:adni-sweep}
+\end{subfigure}
+
+\vspace{1.2em}
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\adnifig{per_gene_auc.pdf}}
+\caption{}\label{fig:adni-pergene}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\adnifig{deconfound_comparison.pdf}}
+\caption{}\label{fig:adni-deconfound}
+\end{subfigure}
+
+\vspace{1.2em}
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\adnifig{downsample_recoverability.pdf}}
+\caption{}\label{fig:adni-datasize}
+\end{subfigure}
+\caption{ADNI results ($n=702$, FastSurfer morphometry $+$ PyRadiomics, copula
+marginals).
+\textbf{(a)} Recoverability spectrum. The honest cross-validated
 spectrum (blue) resolves \emph{two} genomic directions
 ($\hat R_1^{\mathrm{cv}} = 0.37$, $\hat R_2^{\mathrm{cv}} = 0.17$) above the
 permutation null before collapsing --- the strongest and highest-rank channel
-of the three cohorts (compare Figs.~\ref{fig:kirc-spectrum},
-\ref{fig:nsclc-spectrum}).}
-\label{fig:adni-spectrum}
+of the three cohorts (compare Figs.~\ref{fig:kirc-spectrum}, \ref{fig:nsclc}).
+\textbf{(b)} Sample-complexity sweep. The honest $\hat R_1^{\mathrm{cv}}$
+(blue squares) rises monotonically with cohort size to a plateau near $0.35$,
+in contrast to the trendless KIRC band (Fig.~\ref{fig:kirc-sweep}); the
+in-sample $\hat\rho_1^2$ (grey) hugs the Wachter edge (green) and the
+permutation $95\%$ null (red) throughout.
+\textbf{(c)} Per-gene predictability. Five high- and five
+low-recoverability transcripts, two classifiers, $5$-fold CV. The
+high-recoverability group reaches AUC $\approx 0.84$; the low-recoverability
+group sits at the $0.5$ chance line.
+\textbf{(d)} Demographic deconfounding. Honest cross-validated
+recoverability spectrum before (blue) and after (orange) regressing age, sex,
+and education out of both modalities. The raw rank-two channel
+($\hat R_1^{\mathrm{cv}} = 0.37$) collapses to a null
+($\hat R_1^{\mathrm{cv}} = 0.006$, $\hat k_{\mathrm{eff}} = 0$, permutation
+$p = 0.48$): the ADNI association is almost entirely demographically mediated.
+\textbf{(e)} Data-requirement sweep at fixed working dimension
+$p^\star=d^\star=30$. The raw $\hat R_1^{\mathrm{cv}}$ (blue) clears the
+shrinking permutation null (red) near $n \approx 350$ and plateaus; the
+demographic-deconfounded $\hat R_1^{\mathrm{cv}}$ (orange) stays flat near zero
+at every $n$. More data detects the raw channel but never rescues the
+deconfounded one.}
+\label{fig:adni}
 \end{figure}
 
 \subsection{Information budget and sample-complexity scaling}
@@ -1928,17 +1973,6 @@ direction lives \emph{below} that in-sample edge at every $n$ and is visible
 only through cross-validation and permutation --- the same lesson as the tumour
 cohorts, but here the honest signal is large enough that even a few hundred
 subjects suffice to register it cleanly.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.85\linewidth]{\adnifig{sample_complexity_sweep.pdf}}
-\caption{Sample-complexity sweep on ADNI. The honest $\hat R_1^{\mathrm{cv}}$
-(blue squares) rises monotonically with cohort size to a plateau near $0.35$,
-in contrast to the trendless KIRC band (Fig.~\ref{fig:kirc-sweep}); the
-in-sample $\hat\rho_1^2$ (grey) hugs the Wachter edge (green) and the
-permutation $95\%$ null (red) throughout.}
-\label{fig:adni-sweep}
-\end{figure}
 
 \subsection{Per-gene non-linear validation}
 \label{sec:adni-pergene}
@@ -1966,16 +2000,6 @@ not its biological meaning: as Section~\ref{sec:adni-deconfound} shows, the
 decodable transcripts are the ones correlated with age and sex, which brain
 morphometry reads out directly, so the high AUC is the per-gene shadow of the
 same demographic channel rather than an independent molecular signal.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.85\linewidth]{\adnifig{per_gene_auc.pdf}}
-\caption{Per-gene predictability on ADNI. Five high- and five
-low-recoverability transcripts, two classifiers, $5$-fold CV. The
-high-recoverability group reaches AUC $\approx 0.84$; the low-recoverability
-group sits at the $0.5$ chance line.}
-\label{fig:adni-pergene}
-\end{figure}
 
 \subsection{Demographic deconfounding: the channel is an age/sex artefact}
 \label{sec:adni-deconfound}
@@ -2011,18 +2035,6 @@ noise, a demographic artefact. The model's value here is precisely that it conve
 $\hat R_1^{\mathrm{cv}} = 0.37$ into a calibrated null once the obvious common
 causes are removed.
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.75\linewidth]{\adnifig{deconfound_comparison.pdf}}
-\caption{Demographic deconfounding on ADNI. Honest cross-validated
-recoverability spectrum before (blue) and after (orange) regressing age, sex,
-and education out of both modalities. The raw rank-two channel
-($\hat R_1^{\mathrm{cv}} = 0.37$) collapses to a null
-($\hat R_1^{\mathrm{cv}} = 0.006$, $\hat k_{\mathrm{eff}} = 0$, permutation
-$p = 0.48$): the ADNI association is almost entirely demographically mediated.}
-\label{fig:adni-deconfound}
-\end{figure}
-
 \subsection{How much data is needed?}
 \label{sec:adni-datasize}
 Because ADNI is large, we can ask operationally how much of it a study like this
@@ -2044,17 +2056,6 @@ quantity being estimated is genuinely null. The practical reading is the
 mirror of the tumour cohorts: the binding constraint for ADNI is not sample
 size but confounding.
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.85\linewidth]{\adnifig{downsample_recoverability.pdf}}
-\caption{Data-requirement sweep on ADNI at fixed working dimension
-$p^\star=d^\star=30$. The raw $\hat R_1^{\mathrm{cv}}$ (blue) clears the
-shrinking permutation null (red) near $n \approx 350$ and plateaus; the
-demographic-deconfounded $\hat R_1^{\mathrm{cv}}$ (orange) stays flat near zero
-at every $n$. More data detects the raw channel but never rescues the
-deconfounded one.}
-\label{fig:adni-datasize}
-\end{figure}
 
 The contrast across cohorts is the useful object. Three cohorts, the same
 model, estimator, and working-dimension rule yield three distinct verdicts.

@@ -49,18 +49,18 @@
 A Linear--Gaussian Model of Radiogenomic Recoverability}
 
 \author{
-  Joseph Rich \\
-  Division of Biology and Biological Engineering\\
-  California Institute of Technology \\
-  Keck School of Medicine, University of Southern California \\
-  \And
-  Lior Pachter\thanks{Address correspondence to \texttt{lpachter@caltech.edu}.} \\
-  Division of Biology and Biological Engineering\\
-  Department of Computing and Mathematical Sciences\\
-  California Institute of Technology \\
+Joseph Rich$^{1,2}$ \and
+Raphi Kang$^{1,3}$ \and
+Pietro Perona$^{1,3}$ \and
+Lior Pachter$^{1,3}$\thanks{Address correspondence to \texttt{lpachter@caltech.edu}.}
 }
 
-\date{}
+\date{
+\small
+$^1$ Division of Biology and Biological Engineering, California Institute of Technology\\
+$^2$ Keck School of Medicine, University of Southern California\\
+$^3$ Division of Computing and Mathematical Sciences, California Institute of Technology
+}
 
 \renewcommand{\shorttitle}{Image-Identifiable Genomic Subspaces}
 
@@ -754,8 +754,8 @@ findings~\citep{karlo2014ccrcc,shinagare2015ccrcc,shao2025hypoxia}.
 \paragraph{Illustration on synthetic data.}
 Figure~\ref{fig:synthetic-spectrum} shows the recoverability spectrum on a
 synthetic radiogenomic instance generated from the linear--Gaussian model of
-Section~\ref{sec:model} ($n=800$, $p=80$, $d=40$, latent rank $k=5$ with
-prescribed $\{\rho_i^\star\}$). The estimated $\hat\rho_i^2$ closely match
+Section~\ref{sec:model} ($n=800$, $p=80$, $d=40$, latent rank $k=6$ with
+prescribed $\{\rho_i^\star\}$, the last of which is near zero). The estimated $\hat\rho_i^2$ closely match
 the planted values for the identifiable directions and decay toward the
 high-dimensional bulk thereafter, validating
 Proposition~\ref{prop:eig}. Figure~\ref{fig:synthetic-truth} reads the same
@@ -816,6 +816,26 @@ processing inequality~\citep{cover2006elements,tishby2015deep,saxe2019ib,achille
 In applications $p$ and $d$ may rival or exceed $n$, the noise is not isotropic,
 and $A, \Sg, \sigma^2$ are unknown. Because Propositions~\ref{prop:canonical}
 and~\ref{prop:eig} require only $\Sg, \Sx, \Sgx$, we estimate those directly.
+Figure~\ref{fig:schematic} summarizes the full pipeline, from the two feature
+matrices through regularized covariances, the whitened cross-modal CCA matrix,
+its SVD, and the resulting recoverability spectrum and image-identifiable
+genomic directions.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{notebooks/figures/schematic/schematic.png}
+\caption{Overview of the recoverability estimator. From the imaging ($X$) and
+genomic ($G$) feature matrices we form regularized covariances
+$\hat\Sg, \hat\Sx, \hat\Sgx$, whiten and assemble the cross-modal matrix
+$\hat M = \hat\Sg^{-1/2}\hat\Sgx\hat\Sx^{-1/2}$, and take its SVD. The singular
+values are the canonical correlations $\hat\rho_i$; the recoverabilities are
+$\hat R_i = \hat\rho_i^2$ and the mutual information is
+$I(G;X) = -\tfrac12\sum_i \log(1-\hat\rho_i^2)$; the left singular vectors map
+back to image-identifiable genomic directions $\hat a_i$. The spectrum
+$\{\hat R_i\}$ quantifies how much of the genomic variation is identifiable from
+imaging and along how many directions.}
+\label{fig:schematic}
+\end{figure}
 
 \subsection{Regularized covariances}
 \label{sec:estimation-cov}
@@ -994,6 +1014,38 @@ Figure~\ref{fig:kirc-sweep} for the same diagnostic on TCGA-KIRC.}
 \label{fig:synthetic-sweep}
 \end{figure}
 
+The sweep above grows $p^\star, d^\star$ with $n$, which entangles ``more data''
+with ``bigger model''. The complementary question --- how much data is needed at
+a \emph{fixed} model --- is answered by Figure~\ref{fig:synthetic-downsample},
+which holds $p^\star = d^\star = 20$ and varies only $n$ on the same synthetic
+instance, whose planted leading recoverability $\rho_1^2 = 0.65$ is known in
+closed form (Proposition~\ref{prop:eig}). Two thresholds separate. The
+cross-validated \emph{point} estimate $\hat R_1^{\mathrm{cv}}$ is already close to
+the truth at small $n$ (within $90\%$ by $n\approx 80$, i.e.\ $n\approx 2(p^\star
++ d^\star)$), because the planted signal is strong. But the estimate cannot be
+\emph{certified} against the permutation null until later: the null $95\%$
+quantile is inflated to $\approx 1$ in the saturating regime
+($n \lesssim p^\star + d^\star$) and only decays below the estimate at
+$n\approx 176 \approx 4.4(p^\star + d^\star)$. The practical reading is that
+``how much data'' depends on the claim: recovering the right number takes far
+less data than proving it is not an artefact of the high-dimensional geometry,
+and the cohort downsample sweeps (Sections~\ref{sec:adni-datasize}) report the
+latter, conservative threshold.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\synfig{synthetic_downsample_recoverability.pdf}}
+\caption{Fixed-model downsampling sweep on the synthetic instance ($p^\star =
+d^\star = 20$, planted $\rho_1^2 = 0.65$). The cross-validated estimate (blue)
+tracks the known truth (green) even at small $n$, but the permutation null
+$95\%$ quantile (red, dashed) is saturated near $1$ in the small-$n$ regime and
+only falls below the estimate at $n\approx 176$. Recovering the value needs less
+data than certifying it. Companion to the growing-model sweep of
+Fig.~\ref{fig:synthetic-sweep} and the cohort sweeps
+(Fig.~\ref{fig:adni-datasize}).}
+\label{fig:synthetic-downsample}
+\end{figure}
+
 \subsection{Honest recoverability: cross-validation and permutation}
 \label{sec:estimation-honest}
 In-sample canonical correlations are biased upward, severely so when $p, d$ are
@@ -1038,7 +1090,8 @@ planted rank.
 \centering
 \includegraphics[width=0.85\linewidth]{\synfig{cv_recoverability.pdf}}
 \caption{Cross-validated recoverability on a synthetic instance with planted
-rank $k=5$. In-sample $\hat R_i$ (grey) is biased upward; $5$-fold
+rank $k=6$ (the sixth correlation near zero). In-sample $\hat R_i$ (grey) is
+biased upward; $5$-fold
 $\hat R_i^{\mathrm{cv}}$ (blue) tracks the planted truth for the identifiable
 directions and collapses to the null floor afterwards.}
 \label{fig:synthetic-cv}
@@ -1073,6 +1126,167 @@ high-dimensional inflation described in
 Section~\ref{sec:estimation-regimes}.}
 \label{fig:synthetic-vardecomp}
 \end{figure}
+
+\subsection{Checking the model assumptions}
+\label{sec:assumption-checks}
+The closed-form recoverability and mutual information are exact \emph{under} the
+linear--Gaussian law; before trusting the numbers we verify, upfront, how far
+each cohort departs from it. Three checks bracket the assumptions the estimator
+actually uses.
+
+\paragraph{(i) Marginal and joint Gaussianity.}
+The Gaussian-copula transform (Section~\ref{sec:estimation-cov}) makes every
+\emph{marginal} exactly normal by construction; the question is whether the
+\emph{joint} $[G_{\mathrm{pca}}, X_{\mathrm{pca}}]$ is. We test it with a
+Mahalanobis-distance QQ plot against the $\chi^2_p$ law (squared Mahalanobis
+distances are $\chi^2_p$ under joint MVN) and Mardia's standardized skew/kurtosis
+ratios (Fig.~\ref{fig:mvn-joint}). Per-modality marginal normality does not
+imply joint normality, so this is the assumption the spectrum genuinely relies
+on.
+
+\paragraph{(ii) Linearity of the dependence.}
+Canonical correlation sees only second-order (linear) coupling. We complement it
+with the distance correlation~\citep{szekely2007dcor}, which is zero \emph{iff}
+$G_{\mathrm{pca}}$ and $X_{\mathrm{pca}}$ are independent and therefore detects
+non-linear and higher-order dependence the linear--Gaussian estimator is blind
+to. We report a permutation $p$-value (the statistic has a positive
+finite-sample bias, so its null, not its raw value, is the reference). A
+significant distance correlation where the cross-validated recoverability is
+null would indicate a channel the linear bound understates.
+
+\paragraph{(iii) Per-feature marginals.}
+As documentation of the copula step, we summarize per-feature skewness and excess
+kurtosis on the raw features and confirm both vanish after the transform.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.55\linewidth]{\synfig{mvn_joint_diagnostic.pdf}}
+\caption{Joint-MVN check on the concatenated working-space scores
+$[G_{\mathrm{pca}}, X_{\mathrm{pca}}]$ for the synthetic instance: squared
+Mahalanobis distances against $\chi^2_p$ quantiles lie on the line, with kurtosis
+ratio $\approx 1$ and a $0.4\%$ tail beyond the $99\%$ shell. The real cohorts
+(Fig.~\ref{fig:mvn-joint-real}) depart from this in their upper tails.}
+\label{fig:mvn-joint}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.32\linewidth}\centering
+\includegraphics[width=\linewidth]{\kircfig{mvn_joint_diagnostic.pdf}}\\
+{\footnotesize (a) TCGA-KIRC}
+\end{minipage}\hfill
+\begin{minipage}{0.32\linewidth}\centering
+\includegraphics[width=\linewidth]{\nsclcfig{mvn_joint_diagnostic.pdf}}\\
+{\footnotesize (b) NSCLC}
+\end{minipage}\hfill
+\begin{minipage}{0.32\linewidth}\centering
+\includegraphics[width=\linewidth]{\adnifig{mvn_joint_diagnostic.pdf}}\\
+{\footnotesize (c) ADNI}
+\end{minipage}
+\caption{Joint-MVN QQ plots on the three real cohorts (squared Mahalanobis
+distances of $[G_{\mathrm{pca}}, X_{\mathrm{pca}}]$ vs.\ $\chi^2_p$ quantiles;
+the line $y=x$ is exact joint Gaussianity). The copula makes every marginal
+Gaussian, so departures here are purely \emph{joint} non-Gaussianity. All three
+track the line through the bulk and lift above it in the upper tail --- the
+residual leptokurtosis (heavy joint tails) quantified in
+Table~\ref{tab:assumptions}. The deviation is largest in the small tumour
+cohorts (a,~b) and mildest in ADNI (c), the cohort with the most favourable
+$n/(\dim G + \dim X)$ ratio, consistent with the part of the inflation that is
+finite-sample. Together with the synthetic ideal (Fig.~\ref{fig:mvn-joint}) these
+panels are the visual companion to the assumption table.}
+\label{fig:mvn-joint-real}
+\end{figure}
+
+\paragraph{Findings.}
+Table~\ref{tab:assumptions} collects the three checks across cohorts. Two
+patterns are robust. First, the copula transform is doing real work: raw genomic
+marginals are severely non-Gaussian ($78\%$ of KIRC probes fail $|\mathrm{skew}|
+\le 2,\ |\mathrm{kurt}| \le 7$, median excess kurtosis $70$), and all go to
+$0\%$ afterwards. Second, and less obviously, \emph{marginal Gaussianity does not
+buy joint Gaussianity}: even post-copula, the share of samples beyond the
+$\chi^2$ $99\%$ shell is $7$--$16\%$ rather than the nominal $1\%$. Part is
+finite-sample (the ratio $n/(\dim G + \dim X) \approx 2.5$ in all three inflates
+the Mahalanobis tail), but it shrinks monotonically with $n$
+($16\% \to 12\% \to 8\%$ for KIRC $\to$ NSCLC $\to$ ADNI), implicating genuine
+residual \emph{tail dependence} the copula cannot remove. The Mardia skew ratio
+stays $\approx 0$, so the joint is symmetric but leptokurtic. The distance
+correlation is significant in every cohort ($p = 0.005$) but only modestly above
+its inflated null, and its ordering tracks the \emph{linear} recoverability
+rather than exceeding it --- there is no cohort where non-linear dependence
+lights up while the linear channel is dead.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+ & TCGA-KIRC & NSCLC & ADNI \\
+\midrule
+$n$ / joint dim                       & $190/76$ & $129/50$ & $702/280$ \\
+Joint kurt.\ ratio ($1$ = MVN)         & $1.17$   & $1.14$   & $1.02$ \\
+Tail beyond $\chi^2_{.99}$ ($1\%$ = MVN) & $15.8\%$ & $12.4\%$ & $8.1\%$ \\
+Genomic marginals non-normal (raw $\to$ post) & $78\%\!\to\!0\%$ & $57\%\!\to\!0\%$ & $24\%\!\to\!0\%$ \\
+Distance corr.\ (obs / null$_{95}$ / $p$) & $0.43/0.37/.005$ & $0.34/0.31/.005$ & $0.32/0.27/.005$ \\
+\bottomrule
+\end{tabular}
+\caption{Model-assumption diagnostics. The copula removes all marginal
+non-normality; the joint remains mildly heavy-tailed (worst in the small tumour
+cohorts, near-Gaussian in ADNI); the distance correlation reveals no non-linear
+channel beyond the linear one.}
+\label{tab:assumptions}
+\end{table}
+
+\paragraph{What this does and does not cost the upper bound.}
+It is worth separating two claims that the phrase ``$I(G;X)$ is an upper bound''
+can mean. The \emph{operational} bound --- that no estimator, linear or
+non-linear, can recover $G$ from $X$ better than $I(G;X)$ allows --- is the data
+processing inequality $G \to X \to \hat g(X)$ and holds for the \emph{true} joint
+law regardless of its shape (Section~\ref{sec:bern-mi}). What requires Gaussianity
+is the second, computational claim: that the \emph{number} we report,
+$-\tfrac12\sum_i\log(1-\hat\rho_i^2)$, equals that true $I(G;X)$. The copula
+secures the marginals; the residual joint non-Gaussianity above means the two are
+equal only approximately. Crucially, the mis-specification is one-sided in a
+favourable direction: because canonical correlation captures only linear
+coupling, ignoring higher-order dependence can only make the Gaussian formula
+\emph{under}-count the true $I(G;X)$, never over-count it --- so the reported
+figure is conservative as a statement about the true channel, not optimistic.
+The distance-correlation check bounds how much is being missed (little), and the
+finite-sample optimism that runs the \emph{other} way is removed separately by
+the permutation-calibrated upper confidence limit
+(Section~\ref{sec:kirc-ucb}). The net reading: significance and the
+identifiable-rank conclusions are distribution-free and stand; the MI
+\emph{magnitudes} are best read as approximate, most trustworthy in ADNI
+(near-Gaussian joint, large $n$) and most caveated in the small, heavier-tailed
+tumour cohorts.
+
+\paragraph{A signed bias, made precise.}
+The favourable direction is not heuristic; the copula pins it down. Write
+$I(G;X) = h(G) + h(X) - h(G,X)$. The copula forces each marginal to be exactly
+Gaussian, so $h(G)$ and $h(X)$ equal their Gaussian values and the \emph{only}
+term in which the true law can differ from the Gaussian surrogate is the joint
+entropy $h(G,X)$. Because the Gaussian is the maximum-entropy law for a fixed
+covariance, $h(G,X) \le h_{\mathrm{gauss}}(G,X)$, whence
+\begin{equation}
+I(G;X) - \Bigl(-\tfrac12{\textstyle\sum_i}\log(1-\rho_i^2)\Bigr)
+\;=\; h_{\mathrm{gauss}}(G,X) - h(G,X) \;\ge\; 0,
+\label{eq:mi-lower-bound}
+\end{equation}
+with equality \emph{iff} the joint is Gaussian. So, given Gaussian marginals,
+the population canonical-correlation mutual information is a genuine \emph{lower}
+bound on the truth --- exact under joint Gaussianity, an under-estimate
+otherwise --- and the gap is precisely the non-Gaussian (non-linear,
+higher-order) dependence that CCA cannot see, which is what the distance
+correlation probes. (Without the Gaussian-marginal condition the marginal
+negentropies re-enter \eqref{eq:mi-lower-bound} and the sign is no longer
+guaranteed; securing this clean direction is a concrete reason to apply the
+copula.) The two error sources therefore push in \emph{opposite} directions:
+population mis-specification can only \emph{lower} the estimate relative to the
+true $I(G;X)$, while finite-sample inflation of $\hat\rho_i$ \emph{raises} it.
+The permutation-calibrated upper confidence limit
+(Section~\ref{sec:kirc-ucb}) controls the second; \eqref{eq:mi-lower-bound} and
+the distance-correlation check bound the first. A reported figure that is small
+after both controls is therefore a trustworthy statement that the channel is
+genuinely narrow, not an artefact of either bias.
 
 \section{Interpretation for radiogenomics}
 \label{sec:interpretation}
@@ -1382,8 +1596,9 @@ $0.1$, with no evidence for more than one or two.
 marginals). In-sample $\hat R_i$ (grey) is biased upward by the
 high-dimensional geometry; cross-validated $\hat R_i$ (blue, $5$-fold) is a
 small positive residual whose leading component is permutation-significant
-across preprocessing variants. Compare the much larger NSCLC effect of
-Fig.~\ref{fig:nsclc-spectrum}.}
+across preprocessing variants. The NSCLC leading direction
+(Fig.~\ref{fig:nsclc-spectrum}) is of similar magnitude but, unlike KIRC's, does
+not generalize or survive de-confounding at full $n$.}
 \label{fig:kirc-spectrum}
 \end{figure}
 
@@ -1534,65 +1749,91 @@ overfit or leakage.
 \section{Application: NSCLC}
 \label{sec:nsclc}
 
-The same pipeline on a non--small-cell lung cancer
-cohort~\citep{bakr2018nsclcradiogenomics} gives a markedly cleaner positive,
-and serves as the counterpoint that the KIRC channel is genuinely weak rather
-than the method being blind. Imaging is the venous/contrast chest CT; we run
+The non--small-cell lung cancer cohort~\citep{bakr2018nsclcradiogenomics} is
+the most instructive of the three: at small $n$ it presents as the strongest
+positive, but the full cohort exposes it as a cohort-specific overfit that does
+not generalize --- a cautionary counterpoint to the genuinely weak-but-robust
+KIRC channel, and a reminder that label-permutation significance alone is not
+proof of a real association. Imaging is the venous/contrast chest CT; we run
 TotalSegmentator~\citep{wasserthal2023totalsegmentator} for the five pulmonary
 lobes, union them into a lung organ mask, resample to $2\,\mathrm{mm}$ isotropic
 (full-resolution shape extraction over the $\sim$$10^{7}$-voxel lung is
 intractable), and extract the same $d_{\mathrm{native}}=107$ organ-level
 PyRadiomics panel. Genomics is the cohort RNA-seq, processed identically
-(CPM, $\log_{1+}$, $2000$ HVGs). After intersecting the patients with usable
-masks we retain $n = 90$, and apply the copula transform and the
-$p^\star = d^\star = \lfloor n/5 \rfloor = 18$ working-dimension budget.
+(CPM, $\log_{1+}$, $2000$ HVGs). The full cohort with usable masks is
+$n = 129$ (one series, R01-052, dropped for a corrupted volume), with the copula
+transform and a $p^\star = d^\star = \lfloor n/5 \rfloor = 25$
+working-dimension budget.
 
-Fitting returns an in-sample leading correlation $\hat\rho_1 = 0.82$ and
-$2.6$ bits of in-sample MI; the permutation null is well-separated
-($\hat\rho_1^{\mathrm{null}}$ mean $0.67$, $95\%$ quantile $0.72$), so the
-observed $\hat\rho_1 = 0.82$ is clearly significant ($p = 0.005$; top three
-$p = 0.005, 0.025, 0.035$). Crucially the signal survives cross-validation: the
-held-out $R^2$ of the leading canonical genomic score is $0.40$, the leading
-cross-validated recoverability is $\hat R_1^{\mathrm{cv}} = 0.33$ (robustness
-median $0.34$, range $0.21$--$0.39$ over $6$ preprocessing variants), and the
-honest effective rank is $\hat k_{\mathrm{eff}} = 1$ in every variant. The
-$95\%$ upper confidence limit is $I(G;X)\big|_{\text{top-}3} \le 1.23$ bits with
-observed cumulative MI $1.6$ bits sitting \emph{above} the null band ---
-unlike KIRC, where the observed value merely touched the upper edge. The
-per-gene validation tells the same story more strongly than KIRC: the
-image-identifiable group reaches mean AUC $0.73$ (logistic) / $0.69$ (RF)
-versus $0.51 / 0.53$ for the non-identifiable group.
+\paragraph{In-sample significance does not survive honest validation.}
+Fitting returns an in-sample leading correlation $\hat\rho_1 = 0.73$ and
+$2.9$ bits of in-sample MI; the patient-label permutation null is separated
+($\hat\rho_1^{\mathrm{null}}$ mean $0.66$, $95\%$ quantile $0.72$), so the
+in-sample spectrum is nominally significant (top three
+$p = 0.030, 0.015, 0.030$). But this is the optimistic estimator, and the honest
+checks contradict it. The leading cross-validated recoverability is only
+$\hat R_1^{\mathrm{cv}} = 0.11$, and --- decisively --- the held-out $R^2$ of
+the leading canonical genomic score is \emph{negative} ($-0.46$): the direction
+that maximizes in-sample correlation predicts held-out imaging \emph{worse} than
+a constant mean. The scale-matched cross-validated permutation test still flags
+the leading component ($p = 0.02$; the second and third are null,
+$p = 0.13, 0.97$), so $\hat k_{\mathrm{eff}} = 1$ by that criterion, and the
+robustness grid concurs (median leading $\hat R^{\mathrm{cv}} = 0.11$, range
+$0.10$--$0.16$; rank $\ge 1$ in $6/6$ configs). The lesson is that
+label-permutation significance is necessary but not sufficient: a marginal
+$\hat R_1^{\mathrm{cv}}\approx 0.11$ can clear its own permutation null while
+failing held-out prediction outright. The MI upper bound is correspondingly
+small, $I(G;X)\big|_{\text{top-}3} \le 1.23$ bits. The per-gene validation does
+show the identifiable group is internally consistent (mean AUC $0.70$ logistic /
+$0.69$ RF versus $0.51 / 0.51$), but as below this reflects the overfit axis
+rather than generalizable biology.
+
+\paragraph{The signal is cohort-specific overfit, not biology.}
+The negative held-out $R^2$ is explained by cohort heterogeneity. The cohort was
+released in two tranches; fit separately, the original $98$ patients give
+$\hat R_1^{\mathrm{cv}}\approx 0.25$--$0.29$ and the $31$ later cases give
+$0.35$, but \emph{pooled} they give only $0.11$ --- lower than either part.
+Their leading genomic directions are near-orthogonal ($|\cos| = 0.07$): each
+tranche fits a strong but mutually inconsistent axis, the signature of
+cohort-specific overfit rather than a shared biological channel. The earlier
+small-$n$ analysis of $90$ patients --- dominated by the more homogeneous
+original tranche --- reported a clean $\hat R_1^{\mathrm{cv}}\approx 0.33$ with
+held-out $R^2 = 0.40$; that estimate did not survive enlarging the cohort, which
+is exactly the kind of non-replication the honest diagnostics are meant to catch.
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=0.85\linewidth]{\nsclcfig{cv_recoverability.pdf}}
-\caption{Recoverability spectrum on NSCLC ($n=90$, organ radiomics, copula
-marginals). The leading cross-validated $\hat R_1^{\mathrm{cv}} \approx 0.33$
-(blue) is a substantial honest effect, an order of magnitude above the KIRC
-leading direction of Fig.~\ref{fig:kirc-spectrum}.}
+\caption{Recoverability spectrum on NSCLC ($n=129$, organ radiomics, copula
+marginals). The leading cross-validated $\hat R_1^{\mathrm{cv}} \approx 0.11$
+(blue) is only marginally above the permutation null and, unlike at small $n$,
+does not generalize: the held-out $R^2$ of the leading direction is negative and
+the channel fails de-confounding.}
 \label{fig:nsclc-spectrum}
 \end{figure}
 
-\paragraph{Scanner/site confound.}
-Because organ radiomic texture is sensitive to acquisition, we checked whether
-the leading direction merely encodes a scanner or reconstruction batch. The
-scanner manufacturer (GE / Siemens / Philips) and convolution kernel are indeed
-associated with both modalities --- kernel explains $\eta^2 \approx 0.20$ of the
-leading genomic principal component as well as the imaging one --- so a naive
-estimate is partly batch-inflated. The association nonetheless survives three
-de-confounding controls. (i) Regressing manufacturer and kernel out of
-\emph{both} modalities leaves $\hat R_1^{\mathrm{cv}} = 0.30$ ($p = 0.003$),
-versus $0.33$ raw. (ii) A batch-stratified permutation null, in which genomic
-labels are permuted only \emph{within} manufacturer$\times$kernel blocks so that
-any batch-mediated covariance is preserved under the null, gives null mean
-$0.07$ ($95\%$ quantile $0.17$) against the observed $0.33$
-($p = 0.007$). (iii) Restricting to the largest homogeneous stratum
-(GE scanners with the \texttt{STANDARD} kernel, $n = 59$) still yields
-$\hat R_1^{\mathrm{cv}} = 0.24$. We therefore read the de-confounded leading
-recoverability as $\approx 0.24$--$0.30$ rather than the raw $0.33$: smaller,
-but a genuine biological radiogenomic association rather than an acquisition
-artefact. (Tube voltage and dose were unavailable in the headers and so are
-uncontrolled.)
+\paragraph{De-confounding controls confirm the failure.}
+Consistent with overfit, the leading direction also fails the scanner/batch
+controls that a genuine channel should survive. Scanner manufacturer
+(GE / Siemens / Philips) and convolution kernel are associated with both
+modalities (kernel explains $\eta^2 \approx 0.2$--$0.3$ of the leading principal
+components), so a naive estimate is partly batch-inflated. None of three
+de-confounding controls reaches significance. (i) Regressing manufacturer and
+kernel out of \emph{both} modalities drops the leading recoverability to
+$\hat R_1^{\mathrm{cv}} = 0.089$ ($p = 0.070$). (ii) A batch-stratified
+permutation null, in which genomic labels are permuted only \emph{within}
+manufacturer$\times$kernel blocks so that any batch-mediated covariance is
+preserved under the null, gives null mean $0.054$ ($95\%$ quantile $0.136$)
+against the observed $0.111$ ($p = 0.100$). (iii) The largest homogeneous
+stratum (GE scanners with the \texttt{STANDARD} kernel, $n = 80$) yields
+$\hat R_1^{\mathrm{cv}} = 0.138$. The measurable batch covariates thus account
+for only part of the inflation --- residualizing them leaves a non-significant
+remnant --- while the larger driver, the near-orthogonal per-tranche axes above,
+points to unmeasured acquisition differences (tube voltage, dose, slice
+thickness, and contrast phase were unavailable in the headers) compounded by
+small-$n$, high-dimensional overfitting. The full-cohort verdict is therefore
+that NSCLC carries \emph{no} de-confounding-robust, generalizable radiogenomic
+channel --- the opposite of the small-$n$ reading.
 
 \section{Application: ADNI}
 \label{sec:adni}
@@ -1625,9 +1866,12 @@ gyrus, inferior temporal gyrus, precuneus, and posterior cingulate
 
 \paragraph{Genomics (\texttt{make\_genomics\_matrix.py}).}
 ADNI gene expression is Affymetrix Human Gene microarray, already normalized to
-log-scale intensities; we therefore disable the count-oriented CPM and second
+log-scale intensities and indexed by gene symbol ($20{,}092$ genes, collapsed
+from the original probes); we therefore disable the count-oriented CPM and second
 $\log_{1+}$ steps and reduce to the top $2000$ HVGs before the Gaussian-copula
-transform. Intersecting on subject ID retains $n = 702$ subjects with
+transform. Symbol indexing also makes the leading genomic directions
+interpretable (Section~\ref{sec:adni-deconfound}). Intersecting on subject ID
+retains $n = 702$ subjects with
 $p_{\mathrm{native}} = 2000$ transcripts and $d_{\mathrm{native}} = 1022$
 imaging features, PCA-reduced symmetrically to
 $p^\star = d^\star = \lfloor n/5 \rfloor = 140$
@@ -1638,10 +1882,12 @@ as the tumour cohorts).
 \label{sec:adni-spectrum}
 Fitting copula-regularized CCA returns an in-sample leading correlation
 $\hat\rho_1 = 0.87$ ($\hat R_1 = 0.76$) and $7.1$ bits of in-sample MI over $12$
-components. The honest spectrum is the strongest of the three cohorts:
+components. The honest \emph{raw} spectrum is the strongest of the three
+cohorts --- though Section~\ref{sec:adni-deconfound} will show it is almost
+entirely a demographic artefact:
 $5$-fold cross-validation gives a leading recoverability
 $\hat R_1^{\mathrm{cv}} = 0.37$ and a clearly resolved second direction
-$\hat R_2^{\mathrm{cv}} = 0.12$, with the remainder collapsing to $\approx 0$
+$\hat R_2^{\mathrm{cv}} = 0.17$, with the remainder collapsing to $\approx 0$
 (Fig.~\ref{fig:adni-spectrum}). The permutation null is well-separated
 ($\hat\rho_1^{\mathrm{null}}$ mean $0.76$, $95\%$ quantile $0.77$) and the top
 three observed correlations all clear it at $p \approx 0.005$. The
@@ -1650,8 +1896,8 @@ R_i^{\mathrm{cv}}$ exceeding its own per-component permutation null, is
 $\hat k_{\mathrm{eff}} = 2$ --- the only cohort here where imaging resolves more
 than a single genomic direction. The result is stable across the preprocessing
 grid (HVG method $\times$ $3$ seeds, $6$ configurations): all permutation
-$p < 0.05$, leading $\hat R^{\mathrm{cv}}$ median $0.37$ (range $0.30$--$0.43$),
-and $\hat k_{\mathrm{eff}}$ median $2$ (range $2$--$3$).
+$p < 0.05$, leading $\hat R^{\mathrm{cv}}$ median $0.31$ (range $0.28$--$0.36$),
+and $\hat k_{\mathrm{eff}}$ consistently $2$.
 
 \begin{figure}[h]
 \centering
@@ -1659,7 +1905,7 @@ and $\hat k_{\mathrm{eff}}$ median $2$ (range $2$--$3$).
 \caption{Recoverability spectrum on ADNI ($n=702$, FastSurfer
 morphometry $+$ PyRadiomics, copula marginals). The honest cross-validated
 spectrum (blue) resolves \emph{two} genomic directions
-($\hat R_1^{\mathrm{cv}} = 0.37$, $\hat R_2^{\mathrm{cv}} = 0.12$) above the
+($\hat R_1^{\mathrm{cv}} = 0.37$, $\hat R_2^{\mathrm{cv}} = 0.17$) above the
 permutation null before collapsing --- the strongest and highest-rank channel
 of the three cohorts (compare Figs.~\ref{fig:kirc-spectrum},
 \ref{fig:nsclc-spectrum}).}
@@ -1669,8 +1915,8 @@ of the three cohorts (compare Figs.~\ref{fig:kirc-spectrum},
 \subsection{Information budget and sample-complexity scaling}
 \label{sec:adni-sweep}
 The observed cumulative mutual information over the top three components is
-$2.38$ bits, sitting \emph{above} the permutation band (null mean $1.75$ bits,
-$95\%$ upper limit $1.82$ bits): unlike KIRC, where the observed value merely
+$2.44$ bits, sitting \emph{above} the permutation band (null mean $1.69$ bits,
+$95\%$ upper limit $1.83$ bits): unlike KIRC, where the observed value merely
 touched the upper edge of the null, here the channel is detected rather than
 bounded. Because ADNI is large, subsampling to
 $n \in \{50, 211, 351, 491, 597, 702\}$ traces a genuine scaling law rather than
@@ -1706,50 +1952,130 @@ gives a clean separation, sharper than in either tumour cohort:
 \toprule
 group               & mean AUC (logistic) & mean AUC (RF) \\
 \midrule
-image-identifiable  & $0.853$ & $0.848$ \\
-non-identifiable    & $0.483$ & $0.480$ \\
+image-identifiable  & $0.842$ & $0.841$ \\
+non-identifiable    & $0.466$ & $0.463$ \\
 \bottomrule
 \end{tabular}
 \end{center}
 The image-identifiable transcripts are decodable from brain morphometry at
-AUC $\approx 0.85$ while the non-identifiable controls sit at chance, and the
+AUC $\approx 0.84$ while the non-identifiable controls sit at chance, and the
 random forest does not exceed the linear ceiling --- exactly the falsifiable
-pattern the recoverability score predicts (Fig.~\ref{fig:adni-pergene}).
+pattern the recoverability score predicts (Fig.~\ref{fig:adni-pergene}). This
+confirms the \emph{internal consistency} of the recoverability ordering, but
+not its biological meaning: as Section~\ref{sec:adni-deconfound} shows, the
+decodable transcripts are the ones correlated with age and sex, which brain
+morphometry reads out directly, so the high AUC is the per-gene shadow of the
+same demographic channel rather than an independent molecular signal.
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=0.85\linewidth]{\adnifig{per_gene_auc.pdf}}
 \caption{Per-gene predictability on ADNI. Five high- and five
 low-recoverability transcripts, two classifiers, $5$-fold CV. The
-high-recoverability group reaches AUC $\approx 0.85$; the low-recoverability
+high-recoverability group reaches AUC $\approx 0.84$; the low-recoverability
 group sits at the $0.5$ chance line.}
 \label{fig:adni-pergene}
 \end{figure}
 
-\paragraph{Demographic mediation.}
+\subsection{Demographic deconfounding: the channel is an age/sex artefact}
+\label{sec:adni-deconfound}
 A blood-to-brain channel of this strength warrants the same skepticism we
-applied to the NSCLC scanner confound. Age and sex are powerful common causes
-here: both drive regional brain atrophy (hippocampal and entorhinal volume in
-particular) and systemic whole-blood expression, so a substantial part of the
-$\hat R_1^{\mathrm{cv}} = 0.37$ channel is very likely age/sex-mediated rather
-than a direct molecular readout, and the leading imaging loadings fall on
-exactly the medial-temporal regions that track age and disease stage. ADNI
-demographic and diagnostic covariates were not available in the processed
-matrices used here, so --- unlike the NSCLC batch analysis --- we do not report
-a demographic-residualized estimate; we therefore read the ADNI channel as a
-genuine but largely demographically mediated association, and flag the
-age/sex-deconfounded recoverability as the key open quantity for this cohort.
+applied to the NSCLC scanner confound, and here the verdict is sharper. Age,
+sex, and education are powerful common causes: they drive regional brain atrophy
+(hippocampal and entorhinal volume in particular, exactly where the leading
+imaging loadings fall) \emph{and} systemic whole-blood expression. ADNI supplies
+these covariates~\citep{petersen2010adni}, so we residualize age (year of
+expression collection minus birth year), sex, and years of education out of
+\emph{both} modalities and refit the honest pipeline. The channel essentially
+vanishes (Fig.~\ref{fig:adni-deconfound}): the leading cross-validated
+recoverability drops from $\hat R_1^{\mathrm{cv}} = 0.37$ to
+$\hat R_1^{\mathrm{cv}} = 0.006$ --- only $1.7\%$ of the raw value retained ---
+the second direction collapses likewise, the cross-validated permutation
+$p$-value rises from $0.005$ to $0.48$, and the effective image-identifiable
+rank falls from $\hat k_{\mathrm{eff}} = 2$ to $\hat k_{\mathrm{eff}} = 0$.
+The gene-symbol indexing makes the mechanism explicit: the top loadings of the
+leading genomic direction are almost all sex-chromosome transcripts --- the
+X-inactivation genes \emph{XIST} and \emph{TSIX} against the Y-linked
+\emph{RPS4Y1}, \emph{RPS4Y2}, \emph{DDX3Y}, \emph{UTY}, \emph{EIF1AY},
+\emph{KDM5D}, \emph{USP9Y}, \emph{ZFY}, and \emph{TXLNG2P} --- so the leading
+``image-identifiable'' axis is, transparently, sex, which brain morphometry
+reads out directly. The second direction is dominated by myeloid/inflammatory
+transcripts (\emph{VSIG4}, \emph{RNASE1}, \emph{CCL3L}/\emph{CCL4L},
+\emph{LGALS2}), consistent with an age-associated systemic-inflammation axis.
+Both are exactly the common causes the deconfounding removes.
+NSCLC fails its own de-confounding and held-out checks at full $n$
+(Section~\ref{sec:nsclc}), and ADNI fails here even more sharply: the ADNI
+radiogenomic association does not survive deconfounding at all --- what looked
+like the strongest channel of the three cohorts is, to within cross-validated
+noise, a demographic artefact. The model's value here is precisely that it converts an eye-catching
+$\hat R_1^{\mathrm{cv}} = 0.37$ into a calibrated null once the obvious common
+causes are removed.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\linewidth]{\adnifig{deconfound_comparison.pdf}}
+\caption{Demographic deconfounding on ADNI. Honest cross-validated
+recoverability spectrum before (blue) and after (orange) regressing age, sex,
+and education out of both modalities. The raw rank-two channel
+($\hat R_1^{\mathrm{cv}} = 0.37$) collapses to a null
+($\hat R_1^{\mathrm{cv}} = 0.006$, $\hat k_{\mathrm{eff}} = 0$, permutation
+$p = 0.48$): the ADNI association is almost entirely demographically mediated.}
+\label{fig:adni-deconfound}
+\end{figure}
+
+\subsection{How much data is needed?}
+\label{sec:adni-datasize}
+Because ADNI is large, we can ask operationally how much of it a study like this
+actually requires. Holding the working dimension \emph{fixed} at
+$p^\star = d^\star = 30$ (so that, unlike the sample-complexity sweep of
+Section~\ref{sec:adni-sweep}, the only thing varying is $n$), we subsample the
+cohort over $n \in [70, 702]$ and track the honest leading recoverability, raw
+and demographic-deconfounded, against the permutation $95\%$ null
+(Fig.~\ref{fig:adni-datasize}). Three things are visible. (i)~The raw
+$\hat R_1^{\mathrm{cv}}$ rises steeply and first clears the permutation null near
+$n \approx 350$, reaches $90\%$ of its full-cohort value by $n \approx 490$, and
+plateaus at $\approx 0.39$ thereafter --- so a few hundred matched subjects
+suffice to \emph{detect} the raw channel, and more buy little. (ii)~The permutation null
+falls monotonically with $n$ (more samples, tighter null), which is what makes
+the fixed raw signal register as significant only past a few hundred subjects.
+(iii)~The deconfounded curve sits flat near zero at \emph{every} sample size:
+no amount of additional ADNI data would resurrect the channel, because the
+quantity being estimated is genuinely null. The practical reading is the
+mirror of the tumour cohorts: the binding constraint for ADNI is not sample
+size but confounding.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{\adnifig{downsample_recoverability.pdf}}
+\caption{Data-requirement sweep on ADNI at fixed working dimension
+$p^\star=d^\star=30$. The raw $\hat R_1^{\mathrm{cv}}$ (blue) clears the
+shrinking permutation null (red) near $n \approx 350$ and plateaus; the
+demographic-deconfounded $\hat R_1^{\mathrm{cv}}$ (orange) stays flat near zero
+at every $n$. More data detects the raw channel but never rescues the
+deconfounded one.}
+\label{fig:adni-datasize}
+\end{figure}
 
 The contrast across cohorts is the useful object. Three cohorts, the same
-model, estimator, and working-dimension rule yield a borderline single
-direction ($\hat R^{\mathrm{cv}}\approx 0.1$, $\hat k_{\mathrm{eff}}=1$) in
-clear-cell RCC, a solid single direction
-($\hat R^{\mathrm{cv}}\approx 0.33$, $\hat k_{\mathrm{eff}}=1$) in NSCLC, and a
-strong rank-two channel ($\hat R_1^{\mathrm{cv}}\approx 0.37$,
-$\hat k_{\mathrm{eff}}=2$) in ADNI. The recoverable dimension is a property of
-the biology--imaging channel (Proposition~\ref{prop:rank}); these three
-channels differ in both strength and rank while obeying the same estimation
-geometry --- exactly the regime the model is built to quantify.
+model, estimator, and working-dimension rule yield three distinct verdicts.
+In clear-cell RCC, a small but preprocessing-invariant single direction
+($\hat R^{\mathrm{cv}}\approx 0.11$, $\hat k_{\mathrm{eff}}=1$, perm
+$p\approx 0.005$) --- the most defensible positive of the three. In NSCLC, an
+apparent signal that at small $n$ looked the strongest
+($\hat R_1^{\mathrm{cv}}\approx 0.33$, held-out $R^2 = 0.40$) but at the full
+$n = 129$ collapses to a marginal $\approx 0.11$ with \emph{negative} held-out
+$R^2$, near-orthogonal leading axes across release tranches ($|\cos| = 0.07$),
+and failed de-confounding ($p \ge 0.07$): cohort-specific overfit, not a shared
+channel. And an ADNI channel that is the strongest of all on raw data
+($\hat R_1^{\mathrm{cv}}\approx 0.37$, $\hat k_{\mathrm{eff}}=2$) yet collapses
+to a null once age, sex, and education are removed
+($\hat R_1^{\mathrm{cv}}\approx 0.006$, $\hat k_{\mathrm{eff}}=0$). The
+recoverable dimension is a property of the biology--imaging channel
+(Proposition~\ref{prop:rank}), and the same honest pipeline both quantifies a
+small real low-rank association (KIRC) and exposes the two failure modes ---
+non-replicating overfit (NSCLC) and confounding (ADNI) --- that a naive
+in-sample estimator would have reported as strong positives. That discriminating
+power is exactly what the model is built to provide.
 
 \appendix
 \section{Symbol reference}

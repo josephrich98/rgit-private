@@ -85,13 +85,13 @@ done
 wget -O data/nsclc/imaging/manifest.tcia https://www.cancerimagingarchive.net/wp-content/uploads/NSCLC_Radiogenomics-6-1-21-Version-4.tcia
 wget -O data/nsclc/imaging/metadata.xlsx https://www.cancerimagingarchive.net/wp-content/uploads/NSCLC_Radiogenomics-6-1-21-Version-4-nbia-digest.xlsx
 wget -O data/nsclc/genomics/gene_expression.txt.gz https://ftp.ncbi.nlm.nih.gov/geo/series/GSE103nnn/GSE103584/suppl/GSE103584%5FR01%5FNSCLC%5FRNAseq%2Etxt%2Egz
-nbia-data-retriever --cli /home/jrich/Desktop/rgit/data/nsclc/imaging/manifest.tcia -d /home/jrich/Desktop/rgit/data/nsclc/imaging/dicom -v -f
+nbia-data-retriever --cli data/nsclc/imaging/manifest.tcia -d data/nsclc/imaging/dicom -v -f
 python scripts/make_imaging_matrix.py -o data/nsclc/imaging/organ_radiomics.h5ad -m data/nsclc/imaging/metadata.csv --mask_col organ_mask --embedder pyradiomics --label 1
 python scripts/make_genomics_matrix.py -o data/nsclc/genomics/gene_expression.h5ad --dataset nsclc --feature gene_expression data/nsclc/genomics/gene_expression.txt.gz
 
 ### ADNI
 python scripts/process_imaging_adni.py
-python scripts/make_genomics_matrix.py -o data/adni/genomics/gene_expression.h5ad --dataset adni --feature gene_expression /home/jrich/Desktop/rgit/data/adni/genomics/ADNI_Gene_Expression_Profile.csv
+python scripts/make_genomics_matrix.py -o data/adni/genomics/gene_expression.h5ad --dataset adni --feature gene_expression data/adni/genomics/ADNI_Gene_Expression_Profile.csv
 
 
 ## Status

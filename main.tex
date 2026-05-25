@@ -89,13 +89,150 @@ $i$-th canonical genomic direction equals the squared canonical correlation
 $\rho_i^2$. We then address estimation in the regime $p \gg n$ via regularized
 covariances, reduced-rank regression, and the probabilistic-CCA latent-variable
 form, and describe cross-validated and permutation-based procedures for honest
-inference. The companion notebook
-\texttt{notebooks/radiogenomic\_recoverability.ipynb} implements the full
+inference, including a scale-matched permutation null that prevents
+high-dimensional inflation from masquerading as signal. The mathematics is
+deliberately classical; the contributions are the recoverability framing, the
+honest-rank estimation pipeline, and a cautionary three-cohort study. Applied to
+TCGA-KIRC, an NSCLC cohort, and ADNI, the same pipeline returns three different
+verdicts: only TCGA-KIRC shows a small ($\hat R^{\mathrm{cv}}\approx 0.1$,
+single-direction) association that survives both cross-validation and
+demographic/scanner deconfounding, whereas the apparent NSCLC signal is
+cohort-specific overfit and the ADNI signal an age/sex artefact --- all three of
+which a naive in-sample estimate would report as strong positives. The companion
+notebook \texttt{notebooks/radiogenomic\_recoverability.ipynb} implements the full
 pipeline on a pair of \texttt{AnnData} objects, with a synthetic-data fallback
 that has known ground truth.
 \end{abstract}
 
 \keywords{radiogenomics \and canonical correlation analysis \and mutual information \and recoverability \and linear--Gaussian model}
+
+\section{Introduction}
+\label{sec:intro}
+
+Radiogenomics asks how much of a tumour's --- or an organ's --- molecular state
+is written into its image~\citep{rutman2009radiogenomics,gillies2016radiomics,lambin2017radiomics,bodalal2019radiogenomics}.
+The dominant empirical paradigm trains one predictor per gene or per signature
+and reports where imaging ``predicts'' genomics. At the cohort sizes typical of
+the field ($n\sim 10^2$) against panels of $10^3$--$10^4$ transcripts, this is a
+high-dimensional, low-power multiple-testing problem in which apparent positives
+are easily manufactured by overfitting, batch structure, or demographic
+confounding. We argue that the more useful and more answerable question is not
+``does imaging predict gene $j$?'' but \emph{how many genomic directions are
+image-identifiable at all, and how well} --- a low-dimensional, estimable
+quantity with a hard ceiling set by the biology--imaging channel rather than by
+the size of the gene panel.
+
+To make this precise we adopt the simplest model with a non-trivial answer: a
+linear--Gaussian channel from genomics $g\in\R^p$ to imaging $x\in\R^d$. Under
+it every quantity of interest is closed-form --- the Bayes-optimal estimator
+$\E[g\mid x]$, the posterior covariance, the mutual information $I(g;x)$, and a
+per-direction \emph{recoverability score} $R(v)\in[0,1]$ --- and the directions
+of maximal recoverability coincide exactly with canonical correlation analysis
+(CCA) between the two modalities, with $R(a_i)=\rho_i^2$, the squared canonical
+correlation. The model thus turns a vague ``fundamental limit'' intuition into a
+concrete, estimable spectrum $\rho_1^2\ge\rho_2^2\ge\cdots$ and an associated set
+of genomic directions that can be read back onto genes and pathways.
+
+\paragraph{What is and is not new.}
+We want to be explicit about provenance, because the mathematics here is
+deliberately classical and the contribution lies elsewhere. The closed forms in
+Sections~\ref{sec:joint}--\ref{sec:eigenproblem} --- the joint Gaussian law
+(Prop.~\ref{prop:joint}), the Gaussian posterior (Prop.~\ref{prop:posterior}),
+the determinant/SNR formula for $I(G;X)$ (Prop.~\ref{prop:mi}), the
+canonical-coordinate diagonalization (Prop.~\ref{prop:canonical}), and the
+equivalence of the recoverability eigenproblem with CCA (Prop.~\ref{prop:eig})
+--- are all standard consequences of Gaussian conditioning, Hotelling's
+CCA~\citep{hotelling1936cca}, and the Gaussian mutual-information identity
+(\citealp{cover2006elements}; see also probabilistic CCA,
+\citealp{bach2005pcca}). We claim them as \emph{assembly and framing}, not as new
+theorems, and we attribute each in place. Our actual contributions are three:
+\begin{enumerate}
+\item \textbf{The recoverability framing.} We define a per-direction
+recoverability score $R(v)$ and an image-identifiable genomic subspace, show
+$R(a_i)=\rho_i^2$, and give the rank limit (Prop.~\ref{prop:rank}) that caps the
+identifiable dimension at a property of the channel, not the panel. We also
+extend the construction to binary mutation data via a Gaussian-copula/probit
+prior (Section~\ref{sec:bernoulli}), and make precise the \emph{signed} direction
+of the Gaussian misspecification error (Eq.~\eqref{eq:mi-lower-bound}), which to
+our knowledge is not stated elsewhere in this setting.
+\item \textbf{A scale-matched honest-rank pipeline.} CCA in the $p\gtrsim n$
+regime inflates canonical correlations toward $1$ by pure geometry. We give an
+estimator that pairs symmetric dimension reduction with a cross-validated
+recoverability whose permutation null is built \emph{on the same
+(cross-validated) scale} as the statistic it calibrates
+(Section~\ref{sec:estimation-honest}); naively thresholding a CV-deflated
+statistic against an in-sample-inflated null forces the estimated rank to zero
+regardless of true signal.
+\item \textbf{A cross-cohort empirical study, read cautiously.} We apply the same
+pipeline to three cohorts (TCGA-KIRC, an NSCLC radiogenomic set, and ADNI) and
+obtain three different verdicts. The headline is sobering: of the three, only
+one (KIRC) shows a small association that survives both honest validation and
+demographic/scanner deconfounding; the NSCLC signal is cohort-specific overfit
+and the ADNI signal is an age/sex artefact. The value of the framework is
+precisely that it separates these cases, where a naive in-sample estimate would
+report all three as strong positives.
+\end{enumerate}
+
+\paragraph{A note on tone.}
+This is as much a cautionary methods paper as a positive-result paper. Read
+literally, our strongest empirical finding is that confound-robust radiogenomic
+signal is scarce and low-dimensional even in favourable cohorts. We have tried
+to state magnitudes conservatively, to report cross-validated and
+permutation-calibrated numbers rather than in-sample ones throughout, and to
+flag where a result rests on a single configuration. The reader should come away
+with calibrated skepticism, not with the impression that imaging broadly recovers
+genomics.
+
+\section{Related work}
+\label{sec:related}
+
+\paragraph{CCA and its probabilistic form.}
+Canonical correlation analysis dates to~\citet{hotelling1936cca}; its
+probabilistic / latent-variable interpretation, which we use in
+Section~\ref{sec:estimation-pcca}, is due to~\citet{bach2005pcca}, and the
+kernel/regularized variants are surveyed by~\citet{hardoon2004kcca}. The
+identity that links Gaussian mutual information to the canonical correlations,
+$I=-\tfrac12\sum_i\log(1-\rho_i^2)$, is classical~\citep{cover2006elements}. Our
+recoverability score and eigenproblem are a re-reading of this machinery in
+terms of posterior-variance reduction per genomic direction; we add the rank
+limit and the binary-data extension.
+
+\paragraph{High-dimensional and sparse CCA.}
+When $p,d$ are comparable to $n$, sample canonical correlations are severely
+biased upward. The limiting laws of sample canonical correlations under the null
+and finite-rank alternatives are characterized by random-matrix
+theory~\citep{wachter1980limiting,yang2015independence,bao2019cca}, which we use
+directly to place a detection edge on the spectrum
+(Section~\ref{sec:estimation-regimes}). Two families of remedies exist:
+regularization/shrinkage (Ledoit--Wolf~\citep{ledoit2004shrinkage}) and sparsity
+(penalized CCA,~\citealp{witten2009sparsecca}; sparse-PCA consistency
+theory,~\citealp{johnstone2009pca}). We adopt symmetric dimension reduction plus
+shrinkage and lean on cross-validation and permutation for honesty rather than on
+sparsity, but sparse CCA is a natural alternative estimator within the same
+framing.
+
+\paragraph{Information-theoretic limits and estimation.}
+The fundamental-limit perspective --- bounding what \emph{any} predictor can
+achieve --- is in the spirit of rate--distortion theory~\citep{berger1971rate}
+and the information bottleneck~\citep{tishby1999ib,chechik2005gaussianib,tishby2015deep},
+specialized here to a linear--Gaussian channel where the bottleneck is exactly
+solvable. Because we report mutual information, we are mindful that general MI
+estimation is fragile in high dimensions and that variational estimators can be
+badly biased~\citep{mcallester2020stratos,kraskov2004mi,belghazi2018mine}; our
+reported MI is the closed-form Gaussian functional of estimated canonical
+correlations, not a generic estimator, and we bound its misspecification error in
+both directions (Sections~\ref{sec:assumption-checks},~\ref{sec:kirc-ucb}).
+
+\paragraph{Radiogenomics.}
+Empirical radiogenomics has reported imaging correlates of molecular state across
+many tumour types~\citep{gevaert2012nsclc,jamshidi2015ccrcc,karlo2014ccrcc,shinagare2015ccrcc,udayakumar2024radiogenomic,bi2019ai,hosny2018ai},
+typically as per-gene or per-signature predictors built on radiomic
+features~\citep{lambin2012radiomics,aerts2014radiomics,vangriethuysen2017pyradiomics}
+or deep embeddings~\citep{mei2022radimagenet}. Our framework is complementary: it
+does not build a predictor but bounds and counts the directions any predictor
+could exploit, and it supplies the confound and sample-size controls that
+distinguish a real low-rank channel from the overfitting and batch effects that
+the per-gene paradigm is prone to.
 
 \section{Setup and notation}
 \label{sec:setup}
@@ -147,7 +284,7 @@ isotropic-noise and known-parameter assumptions for practical fitting.
 
 %%% (G X) is the concatenation of the two modalities ie a vector in R^{p+d}.
 
-\begin{proposition}[Joint Gaussian law]
+\begin{proposition}[Joint Gaussian law; classical Gaussian identity, e.g.\ \citealp{cover2006elements}]
 \label{prop:joint}
 Under \eqref{eq:prior}--\eqref{eq:structural},
 \begin{equation}
@@ -178,6 +315,14 @@ and the cross-covariance is
 \end{proposition}
 
 \begin{proof}
+Since $G$ and $\varepsilon$ are independent Gaussians and
+$(G, X)$ is the affine image $(G,\,AG+\varepsilon)$, the pair is jointly
+Gaussian with zero mean. The covariance blocks follow by standard Gaussian
+conditioning: $\Cov(G,G)=\Sg$, $\Cov(G,X)=\Cov(G,AG+\varepsilon)=\Sg A\T$ (using
+$\varepsilon\perp G$), and $\Var(X)=\Cov(AG+\varepsilon)=A\Sg A\T+\sigma^2 I_d$.
+\end{proof}
+
+\iffalse
 Since
 \[
 X = AG + \varepsilon,
@@ -338,13 +483,7 @@ A\Sg & A\Sg A^\top+\sigma^2 I_d
 \]
 which proves the claim.
 \end{proof}
-
-% \begin{proof}
-% $G$ and $\varepsilon$ are jointly Gaussian and independent, and
-% $(G, X)$ is a linear image of $(G, \varepsilon)$, hence jointly Gaussian. The
-% blocks follow from $\Cov(G,X) = \Cov(G, AG + \varepsilon) = \Sg A\T$ and
-% $\Var(X) = A \Sg A\T + \sigma^2 I_d$.
-% \end{proof}
+\fi
 
 Equation~\eqref{eq:sigmax} is the model's first interpretive statement: imaging
 covariance decomposes additively into a \emph{genomics-driven} component
@@ -355,7 +494,7 @@ directions co-vary with imaging at all.
 \section{Bayes-optimal recovery of genomics from imaging}
 \label{sec:posterior}
 
-\begin{proposition}[Posterior]
+\begin{proposition}[Posterior; standard Gaussian conditioning]
 \label{prop:posterior}
 The posterior of genomics given imaging is Gaussian, $G \mid X \sim \N(\hat g(X), \Sgcx)$, with
 \begin{align}
@@ -372,63 +511,23 @@ B = \sigma^{-2}\, \Sgcx\, A\T .
 \end{proposition}
 
 \begin{proof}
-We start from the joint law of Proposition~\ref{prop:joint}. For a jointly
-Gaussian pair with zero mean and blocks
-\[
-\begin{pmatrix} G\\ X \end{pmatrix}
-\sim
-\N\!\left(
-\mathbf{0},
-\begin{pmatrix}
-\Sg & \Sgx\\
-\Sxg & \Sx
-\end{pmatrix}
-\right),
-\]
-the standard Gaussian conditioning formulas state that $G \mid X$ is Gaussian with
-\[
-\E[G \mid X] = \Sgx\, \Sx^{-1} X,  %%% (2)
-\qquad
-\Cov(G \mid X) = \Sg - \Sgx\, \Sx^{-1}\, \Sxg .
-\]
-Substituting the blocks computed in Proposition~\ref{prop:joint}, namely
-$\Sgx = \Sg A\T$, $\Sxg = A\Sg$, and $\Sx = A\Sg A\T + \sigma^2 I_d$, gives
-\[
-\hat g(X) = \E[G \mid X] = \Sg A\T \big(A\Sg A\T + \sigma^2 I_d\big)^{-1} X,
-\]
-\[
-\Sgcx = \Sg - \Sg A\T \big(A\Sg A\T + \sigma^2 I_d\big)^{-1} A\Sg,
-\]
-which are \eqref{eq:postmean}--\eqref{eq:postcov}, and identifies the Bayes map
-$B = \Sg A\T \Sx^{-1}$.
-
-For the precision form, apply the Woodbury matrix identity
-\[
-\big(\Sg^{-1} + \sigma^{-2} A\T A\big)^{-1}
-= \Sg - \Sg A\T\big(\sigma^2 I_d + A\Sg A\T\big)^{-1} A\Sg .
-\]
-The right-hand side is exactly $\Sgcx$, so $\Sgcx^{-1} = \Sg^{-1} + \sigma^{-2} A\T A$;  %%% take the inverse of both sides of the equation above
-imaging contributes additively to the prior precision $\Sg^{-1}$.
-
-It remains to rewrite $B$. Multiply the push-through identity
-\[
-A\T\big(A\Sg A\T + \sigma^2 I_d\big)
-= \big(A\T A + \sigma^2\Sg^{-1}\big)\Sg A\T
-= \sigma^2\big(\Sg^{-1} + \sigma^{-2}A\T A\big)\Sg A\T
-\]
-on the right by $(A\Sg A\T + \sigma^2 I_d)^{-1}$ and on the left by
-$\sigma^{-2}(\Sg^{-1} + \sigma^{-2}A\T A)^{-1} = \sigma^{-2}\Sgcx$ to obtain
-\[
-\sigma^{-2}\Sgcx\, A\T
-= \Sg A\T\big(A\Sg A\T + \sigma^2 I_d\big)^{-1} = B .
-\]
-Hence $B = \sigma^{-2}\Sgcx A\T$, completing \eqref{eq:precision}.
+By standard Gaussian conditioning on the joint law of
+Proposition~\ref{prop:joint}, $G\mid X$ is Gaussian with mean
+$\Sgx\Sx^{-1}X$ and covariance $\Sg-\Sgx\Sx^{-1}\Sxg$. Substituting the blocks
+$\Sgx=\Sg A\T$, $\Sxg=A\Sg$, $\Sx=A\Sg A\T+\sigma^2 I_d$ gives
+\eqref{eq:postmean}--\eqref{eq:postcov} and $B=\Sg A\T\Sx^{-1}$. The precision
+form $\Sgcx^{-1}=\Sg^{-1}+\sigma^{-2}A\T A$ and $B=\sigma^{-2}\Sgcx A\T$ follow
+from the Woodbury identity applied to $\Sgcx$ and the push-through identity
+$A\T(A\Sg A\T+\sigma^2 I_d)=\sigma^2(\Sg^{-1}+\sigma^{-2}A\T A)\Sg A\T$.
 \end{proof}
 
 The estimator $\hat g(X) = BX$ is the Bayes-optimal predictor under squared-error
 loss; because the model is jointly Gaussian it is also the optimal predictor over
-\emph{all} measurable functions of $X$, not merely linear ones. Thus $\Sgcx$ is a
-hard floor on residual genomic uncertainty: \textbf{no algorithm can do better}.
+\emph{all} measurable functions of $X$, not merely linear ones. Thus, \emph{under
+the assumed linear--Gaussian law}, $\Sgcx$ is a hard floor on residual genomic
+uncertainty: \textbf{no algorithm can do better}. This is a statement about the
+model, not an unconditional guarantee on real data; Section~\ref{sec:assumption-checks}
+quantifies how far each cohort departs from the law and what that costs the bound.
 The precision form~\eqref{eq:precision} makes the accounting transparent ---
 imaging \emph{adds} information $\sigma^{-2} A\T A$ to the prior precision
 $\Sg^{-1}$.
@@ -436,7 +535,7 @@ $\Sg^{-1}$.
 \section{Mutual information and the SNR decomposition}
 \label{sec:mi}
 
-\begin{proposition}[Mutual information]
+\begin{proposition}[Mutual information; classical Gaussian MI identity, \citealp{cover2006elements}]
 \label{prop:mi}
 The mutual information between the two modalities is
 \begin{equation}
@@ -454,47 +553,16 @@ I(G; X) = \tfrac12 \sum_{i=1}^{r} \log\!\left(1 + \frac{\lambda_i}{\sigma^2}\rig
 \end{proposition}
 
 \begin{proof}
-For a jointly Gaussian pair the mutual information is the expected log-ratio of
-the posterior to the prior density of $G$; carrying out the Gaussian integral
-leaves only the determinants of the two covariances,  %%% (3)
-\[
-I(G;X)
-= \tfrac12 \log\frac{\det\Sg}{\det\Sgcx}
-\]
-\citep{cover2006elements}. We now express the ratio through the channel
-parameters. Taking determinants in the precision form  %%% (4)
-$\Sgcx^{-1} = \Sg^{-1} + \sigma^{-2} A\T A$ of \eqref{eq:precision} and factoring
-out $\Sg^{-1}$,
-\[
-\det \Sgcx^{-1}
-= \det\!\big(\Sg^{-1}\big)\,
-  \det\!\big(I_p + \sigma^{-2}\Sg^{1/2} A\T A\, \Sg^{1/2}\big),
-\]
-so that
-\[
-\frac{\det\Sg}{\det\Sgcx}
-= \det\Sg \cdot \det\Sgcx^{-1}  %%% the \det\Sg and upcoming \det\Sg^{-1} cancel
-= \det\!\big(I_p + \sigma^{-2}\Sg^{1/2} A\T A\, \Sg^{1/2}\big).
-\]
-%%% The rest of the proof is in (5)-(6)
-Sylvester's determinant identity $\det(I_p + PQ) = \det(I_d + QP)$, applied with
-$P = \sigma^{-2}\Sg^{1/2}A\T$ and $Q = A\Sg^{1/2}$, moves the factors past one
-another and replaces the $p\times p$ determinant by a $d\times d$ one,
-\[
-\det\!\big(I_p + \sigma^{-2}\Sg^{1/2} A\T A\, \Sg^{1/2}\big)
-= \det\!\big(I_d + \sigma^{-2} A\Sg A\T\big),
-\]
-which is \eqref{eq:mi}. Finally, let $A\Sg A\T = \sum_{i=1}^{r}\lambda_i w_i w_i\T$
-be the spectral decomposition of this symmetric positive-semidefinite matrix,
-with $\lambda_1\ge\cdots\ge\lambda_r>0$ its nonzero eigenvalues. Then
-$I_d + \sigma^{-2}A\Sg A\T$ has eigenvalues $1 + \lambda_i/\sigma^2$ (and $1$ on
-the orthogonal complement, contributing nothing), so its determinant is the
-product $\prod_{i=1}^{r}(1 + \lambda_i/\sigma^2)$ and  %%% (7)
-\[
-I(G;X) = \tfrac12 \log \prod_{i=1}^{r}\Big(1 + \frac{\lambda_i}{\sigma^2}\Big)
-= \tfrac12 \sum_{i=1}^{r} \log\!\Big(1 + \frac{\lambda_i}{\sigma^2}\Big),
-\]
-which is \eqref{eq:mi-diag}.
+By standard Gaussian conditioning the mutual information of a jointly Gaussian
+pair is $I(G;X)=\tfrac12\log(\det\Sg/\det\Sgcx)$~\citep{cover2006elements}.  %%% (3), (4)
+Taking determinants in the precision form \eqref{eq:precision} and factoring out
+$\Sg^{-1}$ gives
+$\det\Sg/\det\Sgcx=\det(I_p+\sigma^{-2}\Sg^{1/2}A\T A\,\Sg^{1/2})$;  %%% the \det\Sg and \det\Sg^{-1} cancel
+Sylvester's identity $\det(I_p+PQ)=\det(I_d+QP)$ converts this to
+$\det(I_d+\sigma^{-2}A\Sg A\T)$, which is \eqref{eq:mi}.  %%% (5)-(6)
+Diagonalizing the symmetric PSD matrix $A\Sg A\T$ with nonzero eigenvalues
+$\lambda_i$, the determinant is $\prod_i(1+\lambda_i/\sigma^2)$, giving
+\eqref{eq:mi-diag}.  %%% (7)
 \end{proof}
 
 Equation~\eqref{eq:mi-diag} is the cleanest reading of the model: each
@@ -533,7 +601,7 @@ M = \sum_{i} d_i\, u_i v_i\T \quad\text{(SVD)},
 with left/right singular vectors $u_i \in \R^d$, $v_i \in \R^p$ and singular
 values $d_1 \ge d_2 \ge \cdots \ge 0$.
 
-\begin{proposition}[Canonical decomposition of recoverability]
+\begin{proposition}[Canonical decomposition of recoverability; recombination of Hotelling CCA~\citealp{hotelling1936cca} and probabilistic CCA~\citealp{bach2005pcca}]
 \label{prop:canonical}
 With $M$ as in \eqref{eq:M}, define the genomic canonical direction
 $a_i := \Sg^{-1/2} v_i$ and the canonical score $S_i := a_i\T G = v_i\T \tilde{G}$. Then:
@@ -674,7 +742,7 @@ R(v)
 \label{eq:varproblem}
 \end{equation}
 
-\begin{proposition}[Recoverability eigenproblem $=$ CCA]
+\begin{proposition}[Recoverability eigenproblem $=$ CCA; the generalized eigenproblem is Hotelling's~\citealp{hotelling1936cca}]
 \label{prop:eig}
 The stationary points of \eqref{eq:varproblem} are the solutions of the
 generalized eigenproblem
@@ -900,7 +968,7 @@ X = W_X Z + \mu_X + \epsilon_X,
 \label{eq:pcca}
 \end{equation}
 $\epsilon_G \sim \N(0, \Psi_G)$, $\epsilon_X \sim \N(0, \Psi_X)$ independent
-(probabilistic CCA; Bach \& Jordan, 2005). Here $k$ \emph{is} the dimension of
+(probabilistic CCA;~\citealp{bach2005pcca}). Here $k$ \emph{is} the dimension of
 the image-identifiable genomic subspace, $Z$ is the shared biological state, and
 $\epsilon_G, \epsilon_X$ are modality-private variation. The implied moments are
 $\Sg = W_G W_G\T + \Psi_G$, $\Sx = W_X W_X\T + \Psi_X$,
@@ -1489,9 +1557,14 @@ radiomic descriptors ($d_{\mathrm{native}}=107$) keeps it in the merely
 high-dimensional one. Second, the marginal transform: the Gaussian-copula
 normalization of Section~\ref{sec:estimation-cov} is essential because raw
 radiomic marginals have excess kurtosis in the tens. With both, the
-imaging-to-genomics channel is \emph{not} empty: at least one genomic direction
+imaging-to-genomics channel is narrow but not empty: one genomic direction
 is image-identifiable above the permutation null in every preprocessing
-variant we tried, with a small but honest cross-validated recoverability. All
+variant we tried, with a small (order $0.1$) but honest cross-validated
+recoverability that, unlike the other two cohorts, survives demographic and
+scanner deconfounding (Section~\ref{sec:kirc-deconfound}). We stress at the
+outset that this is a modest, single-direction effect, borderline in the default
+configuration, and report it as such rather than as a broad demonstration that
+imaging recovers genomics. All
 numbers below are reproducibly generated by the companion notebook and saved to
 \texttt{notebooks/figures/tcga\_kirc/gene\_expression/organ\_radiomics/%
 stats.json} (and the NSCLC counterpart).
@@ -1683,6 +1756,47 @@ $n \gtrsim 25\,p^\star$ quoted in Section~\ref{sec:estimation-regimes}: a
 larger cohort, or a smaller fixed working dimension, would be needed to lift
 this direction cleanly above the in-sample bulk.
 
+\subsection{Demographic and scanner deconfounding}
+\label{sec:kirc-deconfound}
+The same skepticism we apply to NSCLC (scanner/batch, Section~\ref{sec:nsclc})
+and ADNI (age/sex, Section~\ref{sec:adni-deconfound}) must be applied here: a
+small channel is exactly the regime in which a demographic or acquisition
+confound could account for the whole effect. We therefore residualize \emph{both}
+modalities (in the copula-transformed, PCA-reduced working space) on a design
+matrix of patient age, sex, ethnicity, and race --- read from the GDC clinical
+table~\citep{ricketts2018tcgakirc} --- together with the per-patient scanner
+manufacturer (GE / Siemens / Philips) from the TCIA series
+digest~\citep{tcgakirc_tcia,clark2013tcia}, all with full coverage on the $n=190$
+cohort, and refit the honest pipeline ($1000$ permutations).
+
+Unlike the other two cohorts, the KIRC channel \emph{survives}. The leading
+cross-validated recoverability is essentially unchanged ---
+$\hat R_1^{\mathrm{cv}} = 0.115 \to 0.148$ after deconfounding (cross-validated
+permutation $p$ from $0.002$ to $0.001$) --- and the effective image-identifiable
+rank does not drop. This is the decisive contrast of the paper: the controls that
+collapse NSCLC ($\hat R_1^{\mathrm{cv}}$ non-significant after batch residualization)
+and ADNI ($0.37 \to 0.006$, $\hat k_{\mathrm{eff}}: 2\to 0$) leave the KIRC
+association intact, so the small KIRC channel is not explained by the obvious
+common causes (Fig.~\ref{fig:kirc-deconfound}). We caveat appropriately: $\eta^2$
+of the leading imaging PCs attributable to scanner is modest here, the cohort is
+single-disease, and unmeasured acquisition parameters (kVp, slice thickness,
+contrast timing) were not in the available headers, so ``confound-robust'' means
+robust to the measured demographics and scanner manufacturer, not to every
+conceivable batch effect.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.6\linewidth]{\kircfig{deconfound_comparison.pdf}}
+\caption{TCGA-KIRC demographic/scanner deconfounding. Honest cross-validated
+recoverability per direction, raw (blue) versus after regressing age, sex,
+ethnicity, race, and scanner manufacturer out of both modalities (orange). Unlike
+NSCLC (Section~\ref{sec:nsclc}) and ADNI (Fig.~\ref{fig:adni-deconfound}), the
+leading direction is undiminished ($\hat R_1^{\mathrm{cv}} = 0.115 \to 0.148$,
+permutation $p \le 0.002$ throughout): the small KIRC channel is not a
+demographic or scanner artefact.}
+\label{fig:kirc-deconfound}
+\end{figure}
+
 \subsection{Per-gene non-linear validation}
 \label{sec:kirc-pergene}
 The recoverability spectrum makes a sharp, falsifiable prediction: genes
@@ -1725,7 +1839,13 @@ modest cross-validated recoverability $\hat R^{\mathrm{cv}} \approx 0.1$ ---
 neither the dozen directions a $2000$-gene panel might invite nor the flat
 null a saturating deep embedding produces. The signal survives dropping all
 shape features and residualizing every feature on organ volume, so it is
-texture/intensity, not size.
+texture/intensity, not size; and, decisively, it survives regressing out age,
+sex, ethnicity, race, and scanner manufacturer
+($\hat R_1^{\mathrm{cv}} = 0.115\to0.148$, Section~\ref{sec:kirc-deconfound}) ---
+the controls that null both other cohorts. We nonetheless read it cautiously: the
+effect is small, of order $\hat R^{\mathrm{cv}}\approx 0.1$, borderline in the
+single default configuration (leading in-sample permutation $p=0.10$), and rests
+for its robustness on the preprocessing grid rather than on any one fit.
 \item \emph{Design recommendation.} The sample-complexity sweep
 (Section~\ref{sec:kirc-sweep}) shows $\hat R_1^{\mathrm{cv}}$ in a low band
 ($0.04$--$0.17$) without a clear upward trend over $[50, 190]$; the Wachter
@@ -2061,7 +2181,9 @@ The contrast across cohorts is the useful object. Three cohorts, the same
 model, estimator, and working-dimension rule yield three distinct verdicts.
 In clear-cell RCC, a small but preprocessing-invariant single direction
 ($\hat R^{\mathrm{cv}}\approx 0.11$, $\hat k_{\mathrm{eff}}=1$, perm
-$p\approx 0.005$) --- the most defensible positive of the three. In NSCLC, an
+$p\approx 0.005$) that survives demographic and scanner deconfounding
+(Section~\ref{sec:kirc-deconfound}) --- the most defensible positive of the
+three, though still a modest one. In NSCLC, an
 apparent signal that at small $n$ looked the strongest
 ($\hat R_1^{\mathrm{cv}}\approx 0.33$, held-out $R^2 = 0.40$) but at the full
 $n = 129$ collapses to a marginal $\approx 0.11$ with \emph{negative} held-out
@@ -2077,6 +2199,52 @@ small real low-rank association (KIRC) and exposes the two failure modes ---
 non-replicating overfit (NSCLC) and confounding (ADNI) --- that a naive
 in-sample estimator would have reported as strong positives. That discriminating
 power is exactly what the model is built to provide.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We reframed radiogenomics around an estimable, low-dimensional object --- the
+recoverability spectrum $\{\rho_i^2\}$ and the image-identifiable genomic
+subspace --- using a linear--Gaussian model whose closed forms reduce the whole
+analysis to canonical correlation analysis between the modalities. The
+mathematics is classical (Section~\ref{sec:intro}); the contributions are the
+recoverability framing and rank limit, the scale-matched cross-validated /
+permutation pipeline that keeps high-dimensional inflation from masquerading as
+signal, and a three-cohort study that puts the pipeline to work.
+
+The empirical message is deliberately conservative. Across TCGA-KIRC, NSCLC, and
+ADNI --- analyzed with one model, estimator, and dimension-budget rule --- only
+TCGA-KIRC yields a genomic direction that is simultaneously cross-validated,
+permutation-significant, and robust to demographic and scanner deconfounding, and
+even there the recoverability is small ($\hat R^{\mathrm{cv}}\approx 0.1$, a
+single identifiable direction). The NSCLC ``signal'' is cohort-specific overfit
+(negative held-out $R^2$, near-orthogonal per-tranche axes) and the ADNI
+``signal'' is an age/sex artefact that collapses under deconfounding. A naive
+in-sample analysis would have reported all three as strong, multi-direction
+positives. The framework's value is precisely this discrimination, and the
+broader take-away for the field is that confound-robust radiogenomic information
+is scarce, low-rank, and easily counterfeited at typical cohort sizes.
+
+\paragraph{Limitations.}
+Several caveats bound these conclusions. (i)~The recoverability magnitudes are
+exact only under the linear--Gaussian law; the copula secures the marginals but
+the joint remains mildly heavy-tailed (Section~\ref{sec:assumption-checks}), so
+reported MI values are approximate (the misspecification is signed conservatively,
+Eq.~\eqref{eq:mi-lower-bound}, but is nonzero). (ii)~The conclusions depend on
+analyst choices --- the working-dimension rule $p^\star=d^\star=\lfloor n/\tau\rfloor$,
+the imaging representation, the marginal transform --- and while we report a
+robustness grid, the single KIRC positive is borderline in the default
+configuration. (iii)~The per-gene validation ranks genes by an in-sample
+recoverability score; although evaluation is cross-validated, the selection is
+not fully nested, so it is best read as an internal-consistency check rather than
+an independent confirmation. (iv)~``Confound-robust'' means robust to the
+\emph{measured} confounders; unmeasured acquisition parameters were unavailable
+for the tumour cohorts. (v)~Two cohorts are small ($n=190$, $n=129$), at which
+the honest spectrum can certify only one or two directions even when more exist.
+These limitations all point the same way --- toward larger, acquisition-harmonized
+cohorts with recorded covariates --- which the sample-complexity analysis
+(Sections~\ref{sec:kirc-sweep},~\ref{sec:adni-datasize}) quantifies as the binding
+constraint.
 
 \appendix
 \section{Symbol reference}

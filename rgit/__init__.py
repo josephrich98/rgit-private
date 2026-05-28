@@ -5,16 +5,16 @@ linear--Gaussian model of ``main.tex`` (regularized CCA between a patient x
 genomics matrix and a patient x imaging matrix) and exposes the recoverability
 spectrum, image-identifiable genomic directions, the Bayes-optimal posterior,
 and the mutual information between modalities.
+
+For the full, reproducible analysis pipeline -- the headless equivalent of
+``notebooks/radiogenomic_recoverability.ipynb`` -- use
+:func:`rgit.run_recoverability_analysis` (or the ``rgit-recoverability`` console
+script). With no data on disk it runs a synthetic ground-truth dataset, so the
+package is exercisable straight after ``pip install``.
 """
 
 import logging
 import sys
-
-from rgit.radimagenet import (
-    RadImageNetEmbedding,
-    convert_image_to_radimagenet_format,
-    get_radimagenet_embeddings,
-)
 
 from rgit.model import (
     RecoverabilityFit,
@@ -35,12 +35,40 @@ from rgit.model import (
     true_recoverability,
 )
 
-__version__ = "0.1.0"
+from rgit.config import RecoverabilityConfig
+from rgit.datasets import (
+    Preprocessed,
+    load_modalities,
+    make_synthetic_modalities,
+    preprocess,
+)
+from rgit.report import (
+    RecoverabilityReport,
+    mvn_diagnostic,
+    run_recoverability_analysis,
+)
+
+# RadImageNet feature extraction depends on torch/torchvision, which are
+# optional (the `processing` extra). Import lazily so the core analysis package
+# is usable without them; the names resolve to None when torch is absent.
+try:
+    from rgit.radimagenet import (
+        RadImageNetEmbedding,
+        convert_image_to_radimagenet_format,
+        get_radimagenet_embeddings,
+    )
+
+    _HAVE_RADIMAGENET = True
+except ImportError:
+    RadImageNetEmbedding = None
+    convert_image_to_radimagenet_format = None
+    get_radimagenet_embeddings = None
+    _HAVE_RADIMAGENET = False
+
+__version__ = "0.2.0"
 
 __all__ = [
-    "RadImageNetEmbedding",
-    "convert_image_to_radimagenet_format",
-    "get_radimagenet_embeddings",
+    # core estimators
     "RecoverabilityFit",
     "cross_validated_recoverability",
     "cv_permutation_test",
@@ -57,6 +85,19 @@ __all__ = [
     "subspace_alignment",
     "to_dense",
     "true_recoverability",
+    # reproducible analysis pipeline
+    "RecoverabilityConfig",
+    "RecoverabilityReport",
+    "run_recoverability_analysis",
+    "load_modalities",
+    "make_synthetic_modalities",
+    "preprocess",
+    "Preprocessed",
+    "mvn_diagnostic",
+    # RadImageNet feature extraction (requires the `processing` extra)
+    "RadImageNetEmbedding",
+    "convert_image_to_radimagenet_format",
+    "get_radimagenet_embeddings",
 ]
 
 logger = logging.getLogger("rgit")

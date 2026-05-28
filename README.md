@@ -55,6 +55,53 @@ cd rgit_lean && ./check.sh
 
 Analysis notebooks are in `notebooks/`. Reusable estimation utilities live in the `rgit/` package. Batch scripts for large-scale runs are in `scripts/`.
 
+### Reproducing the analysis without the notebook
+
+The full recoverability pipeline that `notebooks/radiogenomic_recoverability.ipynb`
+orchestrates is also packaged as importable code, so it can be reproduced after a
+plain `pip install rgit` — no notebook, and (for the synthetic case) no data on disk.
+
+With no `.h5ad` files it runs the synthetic probabilistic-CCA dataset with known
+ground truth, writing `stats.json` and figures to the output directory:
+
+```bash
+# console script (installed with the package)
+rgit-recoverability --output-dir out/synthetic
+
+# real data
+rgit-recoverability \
+    --genomics data/tcga_kirc/genomics/mutated_genes.h5ad \
+    --imaging  data/tcga_kirc/imaging/tumor_radimagenet.h5ad \
+    --genomics-data-type variant \
+    --output-dir out/kirc
+```
+
+Or from Python:
+
+```python
+import rgit
+
+# synthetic ground-truth run (nothing needed on disk)
+report = rgit.run_recoverability_analysis(
+    rgit.RecoverabilityConfig(output_dir="out/synthetic")
+)
+print(report.stats["effective_identifiable_rank"]["rank"])
+
+# real cohort
+report = rgit.run_recoverability_analysis(
+    genomics_h5ad="data/.../mutated_genes.h5ad",
+    imaging_h5ad="data/.../tumor_radimagenet.h5ad",
+    genomics_data_type="variant",
+    output_dir="out/kirc",
+)
+```
+
+Every knob the notebook exposes lives on `rgit.RecoverabilityConfig`; the resolved
+config is written next to `stats.json` for provenance. Only the core dependencies
+are required — `scanpy` (HVG selection) falls back to variance ranking, and the
+RadImageNet feature extractor (`torch`) is loaded lazily, so neither is needed to
+run the recoverability analysis itself.
+
 ### Synthetic data
 papermill notebooks/radiogenomic_recoverability.ipynb notebooks/out/radiogenomic_recoverability_output_synthetic.ipynb  # synthetic data
 

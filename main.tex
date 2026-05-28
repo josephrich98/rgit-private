@@ -133,56 +133,6 @@ correlation. The model thus turns a vague ``fundamental limit'' intuition into a
 concrete, estimable spectrum $\rho_1^2\ge\rho_2^2\ge\cdots$ and an associated set
 of genomic directions that can be read back onto genes and pathways.
 
-\paragraph{What is and is not new.}
-We want to be explicit about provenance, because the mathematics here is
-deliberately classical and the contribution lies elsewhere. The closed forms in
-Sections~\ref{sec:joint}--\ref{sec:eigenproblem} --- the joint Gaussian law
-(Prop.~\ref{prop:joint}), the Gaussian posterior (Prop.~\ref{prop:posterior}),
-the determinant/SNR formula for $I(G;X)$ (Prop.~\ref{prop:mi}), the
-canonical-coordinate diagonalization (Prop.~\ref{prop:canonical}), and the
-equivalence of the recoverability eigenproblem with CCA (Prop.~\ref{prop:eig})
---- are all standard consequences of Gaussian conditioning, Hotelling's
-CCA~\citep{hotelling1936cca}, and the Gaussian mutual-information identity
-(\citealp{cover2006elements}; see also probabilistic CCA,
-\citealp{bach2005pcca}). We claim them as \emph{assembly and framing}, not as new
-theorems, and we attribute each in place. Our actual contributions are three:
-\begin{enumerate}
-\item \textbf{The recoverability framing.} We define a per-direction
-recoverability score $R(v)$ and an image-identifiable genomic subspace, show
-$R(a_i)=\rho_i^2$, and give the rank limit (Prop.~\ref{prop:rank}) that caps the
-identifiable dimension at a property of the channel, not the panel. We also
-extend the construction to binary mutation data via a Gaussian-copula/probit
-prior (Section~\ref{sec:bernoulli}), and make precise the \emph{signed} direction
-of the Gaussian misspecification error (Eq.~\eqref{eq:mi-lower-bound}), which to
-our knowledge is not stated elsewhere in this setting.
-\item \textbf{A scale-matched honest-rank pipeline.} CCA in the $p\gtrsim n$
-regime inflates canonical correlations toward $1$ by pure geometry. We give an
-estimator that pairs symmetric dimension reduction with a cross-validated
-recoverability whose permutation null is built \emph{on the same
-(cross-validated) scale} as the statistic it calibrates
-(Section~\ref{sec:estimation-honest}); naively thresholding a CV-deflated
-statistic against an in-sample-inflated null forces the estimated rank to zero
-regardless of true signal.
-\item \textbf{A cross-cohort empirical study, read cautiously.} We apply the same
-pipeline to three cohorts (TCGA-KIRC, an NSCLC radiogenomic set, and ADNI) and
-obtain three different verdicts. The headline is sobering: of the three, only
-one (KIRC) shows a small association that survives both honest validation and
-demographic/scanner deconfounding; the NSCLC signal is cohort-specific overfit
-and the ADNI signal is an age/sex artefact. The value of the framework is
-precisely that it separates these cases, where a naive in-sample estimate would
-report all three as strong positives.
-\end{enumerate}
-
-\paragraph{A note on tone.}
-This is as much a cautionary methods paper as a positive-result paper. Read
-literally, our strongest empirical finding is that confound-robust radiogenomic
-signal is scarce and low-dimensional even in favourable cohorts. We have tried
-to state magnitudes conservatively, to report cross-validated and
-permutation-calibrated numbers rather than in-sample ones throughout, and to
-flag where a result rests on a single configuration. The reader should come away
-with calibrated skepticism, not with the impression that imaging broadly recovers
-genomics.
-
 \section{Related work}
 \label{sec:related}
 

@@ -46,6 +46,11 @@ pip install -e .[processing,notebooks,dev]
 
 Python 3.10+ is recommended. Dependencies are declared in `pyproject.toml`.
 
+## Checking math
+``bash
+cd rgit_lean && ./check.sh
+```
+
 ## Usage
 
 Analysis notebooks are in `notebooks/`. Reusable estimation utilities live in the `rgit/` package. Batch scripts for large-scale runs are in `scripts/`.

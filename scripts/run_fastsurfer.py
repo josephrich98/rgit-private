@@ -5,6 +5,8 @@ import subprocess
 from pathlib import Path
 import os
 
+import torch
+
 
 def find_nifti_files(input_dir):
     exts = [".nii", ".nii.gz", ".mgz"]
@@ -54,6 +56,9 @@ def run_fastsurfer(
         f"{output_dir}:/output",
     ]
 
+    if docker == "podman":
+        docker_cmd = ["sudo"] + docker_cmd
+
     # Optional FreeSurfer license mount
     if license_file is not None:
         license_file = Path(license_file).resolve()
@@ -75,7 +80,7 @@ def run_fastsurfer(
         "--threads",
         str(threads),
         "--device",
-        "cuda",
+        "cuda" if torch.cuda.is_available() else "cpu",
     ])
 
     if seg_only:

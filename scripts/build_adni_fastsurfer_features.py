@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 import re
-import sys
+import argparse
 import logging
 import warnings
 from pathlib import Path
@@ -35,8 +35,8 @@ logging.getLogger("radiomics").setLevel(logging.ERROR)
 warnings.filterwarnings("ignore")
 
 REPO = Path(__file__).resolve().parent.parent
-IMG_ROOT = REPO / "data/adni/imaging/nifti_fastsurfer/nifti_fastsurfer"
-OUT = REPO / "data/adni/imaging/fastsurfer.h5ad"
+DEFAULT_IMG_ROOT = REPO / "data/adni/imaging/nifti_fastsurfer/nifti_fastsurfer"
+DEFAULT_OUT = REPO / "data/adni/imaging/fastsurfer.h5ad"
 
 # Key AD regions -> (DKT/aseg label values to union into one bilateral mask).
 AD_REGIONS = {
@@ -85,8 +85,8 @@ def _to_sitk(arr: np.ndarray, is_mask: bool) -> sitk.Image:
 
 
 def extract_subject(args) -> dict | None:
-    sid, dirname = args
-    d = IMG_ROOT / dirname
+    sid, dirname, img_root = args
+    d = Path(img_root) / dirname
     stats_file = d / "stats/aseg+DKT.stats"
     norm_file = d / "mri/orig_nu.mgz"
     seg_file = d / "mri/aparc.DKTatlas+aseg.deep.mgz"
@@ -126,9 +126,22 @@ def extract_subject(args) -> dict | None:
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "-i", "--img-root", type=Path, default=DEFAULT_IMG_ROOT,
+        help="Root directory of FastSurfer per-subject output dirs "
+             f"(default: {DEFAULT_IMG_ROOT})",
+    )
+    parser.add_argument(
+        "-o", "--out", type=Path, default=DEFAULT_OUT,
+        help=f"Output .h5ad path (default: {DEFAULT_OUT})",
+    )
+    args = parser.parse_args()
+    img_root, out = args.img_root, args.out
+
     n_proc = int(os.environ.get("N_PROC", "16"))
-    dirs = sorted(os.listdir(IMG_ROOT))
-    jobs = [(subject_id(d), d) for d in dirs if subject_id(d)]
+    dirs = sorted(os.listdir(img_root))
+    jobs = [(subject_id(d), d, img_root) for d in dirs if subject_id(d)]
     print(f"{len(jobs)} subjects to process with {n_proc} workers", flush=True)
 
     records = []
@@ -152,9 +165,9 @@ def main():
         var=pd.DataFrame(index=df.columns),
     )
     adata.var_names_make_unique()
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    adata.write_h5ad(OUT)
-    print(f"saved {adata.shape} -> {OUT}", flush=True)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    adata.write_h5ad(out)
+    print(f"saved {adata.shape} -> {out}", flush=True)
 
 
 if __name__ == "__main__":

@@ -144,6 +144,7 @@ python scripts/make_genomics_matrix.py -o data/nsclc/genomics/gene_expression.h5
 ### ADNI
 python scripts/process_imaging_adni.py
 python scripts/make_genomics_matrix.py -o data/adni/genomics/gene_expression.h5ad --dataset adni --feature gene_expression data/adni/genomics/ADNI_Gene_Expression_Profile.csv
+python /home/jrich/Desktop/rgit-private/scripts/make_adni_variant_matrix.py --inputs /home/jrich/Desktop/rgit-private/data/adni/genomics/WGS_Omni2.5M_20140220 --reference /home/jrich/data/reference/gatk_grch37/Homo_sapiens_assembly19.fasta --data-sources /home/jrich/data/reference/gatk_grch37/funcotator_dataSources.v1.8.hg19.20230908g --out-maf /home/jrich/Desktop/rgit-private/data/adni/genomics/WGS_Omni2.5M_20140220/genotype.maf.gz --out /home/jrich/Desktop/rgit-private/data/adni/genomics/genotype.h5ad --filter-impact --groupby-gene
 
 
 ## Status

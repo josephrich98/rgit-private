@@ -23,7 +23,8 @@ def run_fastsurfer(
     threads=8,
     tag="latest",
     seg_only=True,
-    overwrite=False
+    overwrite=False,
+    docker="docker"
 ):
     input_file = Path(input_file).resolve()
     output_dir = Path(output_dir).resolve()
@@ -40,7 +41,7 @@ def run_fastsurfer(
         return
 
     docker_cmd = [
-        "docker",
+        docker,
         "run",
         "--rm",
         "--gpus",
@@ -132,6 +133,18 @@ def main():
         help="Run full FastSurfer pipeline instead of seg_only",
     )
 
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing output directories",
+    )
+
+    parser.add_argument(
+        "--docker",
+        default="docker",
+        help="Docker command (e.g. 'docker' or 'podman')",
+    )
+
     args = parser.parse_args()
 
     input_files = find_nifti_files(args.input_dir)
@@ -151,6 +164,8 @@ def main():
             threads=args.threads,
             tag=args.tag,
             seg_only=not args.full,
+            overwrite=args.overwrite,
+            docker=args.docker
         )
 
 

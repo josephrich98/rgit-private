@@ -15,15 +15,18 @@ Requires-Dist: matplotlib>=3.7
 Requires-Dist: tqdm>=4.0
 Requires-Dist: pydantic>=2.0
 Provides-Extra: processing
+Requires-Dist: gseapy; extra == "processing"
 Requires-Dist: SimpleITK>=2.0; extra == "processing"
 Requires-Dist: nibabel>=3.0; extra == "processing"
 Requires-Dist: pyradiomics>=3.0; extra == "processing"
 Requires-Dist: torch>=2.0; extra == "processing"
 Requires-Dist: torchvision>=0.15; extra == "processing"
 Requires-Dist: Pillow>=9.0; extra == "processing"
+Requires-Dist: scanpy>=1.9; extra == "processing"
 Provides-Extra: notebooks
 Requires-Dist: jupyter>=1.0; extra == "notebooks"
 Requires-Dist: ipykernel>=6.0; extra == "notebooks"
+Requires-Dist: papermill>=2.0; extra == "notebooks"
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0; extra == "dev"
 
@@ -54,7 +57,6 @@ Rather than optimizing a specific predictor, the goal is to quantify the *fundam
 ├── notebooks/      # Exploratory analysis and figure generation
 ├── rgit/           # Core Python package
 ├── scripts/        # Standalone analysis scripts
-├── main.tex        # Primary manuscript / technical report
 └── pyproject.toml  # Python project configuration
 ```
 
@@ -70,6 +72,7 @@ The analysis draws on:
 ## Setup
 
 ```bash
+conda create -n rgit -y python=3.10 && conda activate rgit
 pip install -e .[processing,notebooks,dev]
 ```
 
@@ -79,28 +82,49 @@ Python 3.10+ is recommended. Dependencies are declared in `pyproject.toml`.
 
 Analysis notebooks are in `notebooks/`. Reusable estimation utilities live in the `rgit/` package. Batch scripts for large-scale runs are in `scripts/`.
 
-papermill notebooks/radiogenomic_recoverability.ipynb notebooks/radiogenomic_recoverability_output_synthetic.ipynb  # synthetic data
+### Synthetic data
+papermill notebooks/radiogenomic_recoverability.ipynb notebooks/out/radiogenomic_recoverability_output_synthetic.ipynb  # synthetic data
 
+### Real data (TCGA-KIRC example)
+#### Imaging data processing
+python scripts/process_imaging_tcga_kirc.py -d data/tcga_kirc/imaging
+<!-- python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/whole_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --embedder pyradiomics -->
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/organ_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --mask_col organ_mask --embedder pyradiomics
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/tumor_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --mask_col tumor_mask --embedder pyradiomics --label 2
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/whole_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --embedder radimagenet --model_path data/models/RadImageNet_pytorch/ResNet50.pt --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 625,625,200
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/organ_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --mask_col organ_mask --embedder radimagenet --model_path data/models/RadImageNet_pytorch/ResNet50.pt --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 185,185,75
+python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/tumor_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --mask_col tumor_mask --embedder radimagenet --model_path data/models/RadImageNet_pytorch/ResNet50.pt --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 185,185,75 --label 2
+
+#### Genomics data processing
 wget -O data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz https://api.gdc.cancer.gov/data/1c8cfe5f-e52d-41ba-94da-f15ea1337efc
-python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_genes.h5ad data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz --feature gene_symbol
-python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_pathways.h5ad data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz --feature pathway
+python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_genes.h5ad --dataset tcga --feature gene_symbol --patient_ids data/tcga_kirc/imaging/metadata.csv data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz
+python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/mutated_pathways.h5ad --dataset tcga --feature pathway --patient_ids data/tcga_kirc/imaging/metadata.csv data/tcga_kirc/genomics/mc3.v0.2.8.PUBLIC.maf.gz
 
-python scripts/process_imaging.py -d data/tcga_kirc/imaging
-python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/whole_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --embedder pyradiomics
-python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/organ_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --mask_col mask_organ --embedder pyradiomics
-python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/tumor_radiomics.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --mask_col mask_tumor --embedder pyradiomics
-python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/whole_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --embedder radimagenet --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 625,625,200
-python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/organ_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --mask_col mask_organ --embedder radimagenet --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 185,185,75
-python scripts/make_imaging_matrix.py -o data/tcga_kirc/imaging/tumor_radimagenet.h5ad -m data/tcga_kirc/imaging/metadata.csv --image_col imaging --mask_col mask_tumor --embedder radimagenet --clip_min -200 --clip_max 300 --resample_spacing 0.8,0.8,3.0 --apply_mask --crop_size 185,185,75
+gdc-client download -m data/tcga_kirc/genomics/gene_expression_manifest.txt -d data/tcga_kirc/genomics
+tar -xzvf data/tcga_kirc/genomics/gene_expression.tar.gz -C data/tcga_kirc/genomics/gene_expression
+python scripts/make_genomics_matrix.py -o data/tcga_kirc/genomics/gene_expression.h5ad --dataset tcga --feature gene_expression --patient_ids data/tcga_kirc/imaging/metadata.csv --filename_to_patientid data/tcga_kirc/genomics/gene_expression_filename_to_patientid.csv data/tcga_kirc/genomics/gene_expression
 
-
+#### Run notebooks
 for genomics_h5ad in data/tcga_kirc/genomics/*.h5ad; do
     for imaging_h5ad in data/tcga_kirc/imaging/*_radimagenet.h5ad; do
         echo "Running recoverability analysis for genomics: $genomics_h5ad and imaging: $imaging_h5ad"
-        output_notebook="notebooks/radiogenomic_recoverability_output_genomics_$(basename ${genomics_h5ad%.*})_imaging_$(basename ${imaging_h5ad%.*}).ipynb"
+        output_notebook="notebooks/out/radiogenomic_recoverability_output_tcga_kirc_genomics_$(basename ${genomics_h5ad%.*})_imaging_$(basename ${imaging_h5ad%.*}).ipynb"
         papermill notebooks/radiogenomic_recoverability.ipynb "$output_notebook" -p GENOMICS_H5AD "$genomics_h5ad" -p IMAGING_H5AD "$imaging_h5ad"
     done
 done
+
+### NSCLC
+wget -O data/nsclc/imaging/manifest.tcia https://www.cancerimagingarchive.net/wp-content/uploads/NSCLC_Radiogenomics-6-1-21-Version-4.tcia
+wget -O data/nsclc/imaging/metadata.xlsx https://www.cancerimagingarchive.net/wp-content/uploads/NSCLC_Radiogenomics-6-1-21-Version-4-nbia-digest.xlsx
+wget -O data/nsclc/genomics/gene_expression.txt.gz https://ftp.ncbi.nlm.nih.gov/geo/series/GSE103nnn/GSE103584/suppl/GSE103584%5FR01%5FNSCLC%5FRNAseq%2Etxt%2Egz
+nbia-data-retriever --cli /home/jrich/Desktop/rgit/data/nsclc/imaging/manifest.tcia -d /home/jrich/Desktop/rgit/data/nsclc/imaging/dicom -v -f
+python scripts/make_imaging_matrix.py -o data/nsclc/imaging/organ_radiomics.h5ad -m data/nsclc/imaging/metadata.csv --mask_col organ_mask --embedder pyradiomics --label 1
+python scripts/make_genomics_matrix.py -o data/nsclc/genomics/gene_expression.h5ad --dataset nsclc --feature gene_expression data/nsclc/genomics/gene_expression.txt.gz
+
+### ADNI
+python scripts/process_imaging_adni.py
+python scripts/make_genomics_matrix.py -o data/adni/genomics/gene_expression.h5ad --dataset adni --feature gene_expression /home/jrich/Desktop/rgit/data/adni/genomics/ADNI_Gene_Expression_Profile.csv
+
 
 ## Status
 

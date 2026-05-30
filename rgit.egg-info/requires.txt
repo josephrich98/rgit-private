@@ -13,11 +13,14 @@ pytest>=7.0
 [notebooks]
 jupyter>=1.0
 ipykernel>=6.0
+papermill>=2.0
 
 [processing]
+gseapy
 SimpleITK>=2.0
 nibabel>=3.0
 pyradiomics>=3.0
 torch>=2.0
 torchvision>=0.15
 Pillow>=9.0
+scanpy>=1.9

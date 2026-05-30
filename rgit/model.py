@@ -326,6 +326,76 @@ def permutation_test(
     return observed, null, pvalues
 
 
+def _double_centered_distance(M) -> np.ndarray:
+    """Double-centered Euclidean distance matrix (Szekely--Rizzo centering)."""
+    M = to_dense(M).astype(np.float64)
+    # pairwise Euclidean distances
+    sq = np.sum(M * M, axis=1)
+    d2 = sq[:, None] + sq[None, :] - 2.0 * (M @ M.T)
+    np.maximum(d2, 0.0, out=d2)
+    a = np.sqrt(d2)
+    row = a.mean(axis=1, keepdims=True)
+    col = a.mean(axis=0, keepdims=True)
+    return a - row - col + a.mean()
+
+
+def distance_correlation(X, Y) -> float:
+    """Distance correlation between two samples (Szekely, Rizzo & Bakirov, 2007).
+
+    Unlike the canonical correlation the recoverability model fits, the distance
+    correlation is zero **iff** ``X`` and ``Y`` are statistically independent ---
+    it captures non-linear and higher-order dependence the linear--Gaussian model
+    is blind to. Comparing it against the linear spectrum tells you whether the
+    recoverability estimate (and hence the MI upper bound) is missing structure.
+
+    Returns the distance correlation in ``[0, 1]``.
+    """
+    A = _double_centered_distance(X)
+    B = _double_centered_distance(Y)
+    dcov2 = float(np.mean(A * B))
+    dvarx = float(np.mean(A * A))
+    dvary = float(np.mean(B * B))
+    denom = np.sqrt(dvarx * dvary)
+    if denom <= 0:
+        return 0.0
+    return float(np.sqrt(max(dcov2, 0.0) / denom))
+
+
+def distance_correlation_test(X, Y, n_perm: int = 200, random_state: int = 0):
+    """Permutation test for non-linear dependence via distance correlation.
+
+    Rows of ``Y`` are permuted to build a null of the distance correlation under
+    independence. A significant result where the linear canonical correlation is
+    null indicates dependence the linear--Gaussian estimator cannot see.
+
+    Returns
+    -------
+    observed : float distance correlation.
+    null : (n_perm,) array of permuted distance correlations.
+    pvalue : permutation p-value.
+    """
+    A = _double_centered_distance(X)
+    B = _double_centered_distance(Y)
+    dvarx = float(np.mean(A * A))
+    dvary = float(np.mean(B * B))
+    denom = np.sqrt(dvarx * dvary)
+
+    def _dcor_from(Bm):
+        if denom <= 0:
+            return 0.0
+        return float(np.sqrt(max(float(np.mean(A * Bm)), 0.0) / denom))
+
+    observed = _dcor_from(B)
+    rng = np.random.default_rng(random_state)
+    n = A.shape[0]
+    null = np.zeros(n_perm)
+    for b in range(n_perm):
+        perm = rng.permutation(n)
+        null[b] = _dcor_from(B[np.ix_(perm, perm)])
+    pvalue = (1.0 + np.sum(null >= observed)) / (1.0 + n_perm)
+    return observed, null, float(pvalue)
+
+
 def gaussian_rank_transform(M) -> np.ndarray:
     """Column-wise Gaussian-copula marginal transform (rank -> inverse normal).
 

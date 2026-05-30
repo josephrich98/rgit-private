@@ -5,6 +5,8 @@ import subprocess
 from pathlib import Path
 import os
 
+import torch
+
 
 def find_nifti_files(input_dir):
     exts = [".nii", ".nii.gz", ".mgz"]
@@ -23,7 +25,8 @@ def run_fastsurfer(
     threads=8,
     tag="latest",
     seg_only=True,
-    overwrite=False
+    overwrite=False,
+    docker="docker"
 ):
     input_file = Path(input_file).resolve()
     output_dir = Path(output_dir).resolve()
@@ -40,7 +43,7 @@ def run_fastsurfer(
         return
 
     docker_cmd = [
-        "docker",
+        docker,
         "run",
         "--rm",
         "--gpus",
@@ -52,6 +55,9 @@ def run_fastsurfer(
         "-v",
         f"{output_dir}:/output",
     ]
+
+    if docker == "podman":
+        docker_cmd = ["sudo"] + docker_cmd
 
     # Optional FreeSurfer license mount
     if license_file is not None:
@@ -74,7 +80,7 @@ def run_fastsurfer(
         "--threads",
         str(threads),
         "--device",
-        "cuda",
+        "cuda" if torch.cuda.is_available() else "cpu",
     ])
 
     if seg_only:
@@ -132,6 +138,18 @@ def main():
         help="Run full FastSurfer pipeline instead of seg_only",
     )
 
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing output directories",
+    )
+
+    parser.add_argument(
+        "--docker",
+        default="docker",
+        help="Docker command (e.g. 'docker' or 'podman')",
+    )
+
     args = parser.parse_args()
 
     input_files = find_nifti_files(args.input_dir)
@@ -151,6 +169,8 @@ def main():
             threads=args.threads,
             tag=args.tag,
             seg_only=not args.full,
+            overwrite=args.overwrite,
+            docker=args.docker
         )
 
 

@@ -354,7 +354,7 @@ def build_nsclc(args) -> ad.AnnData:
 # ADNI helpers
 # ---------------------------------------------------------------------------
 
-def build_adni(args) -> ad.AnnData:
+def build_adni(args, index_symbol: bool = True) -> ad.AnnData:
     path = args.inputs[0]
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -365,20 +365,32 @@ def build_adni(args) -> ad.AnnData:
     # sample metadata lives in rows above the expression header
     metadata = raw.iloc[:header_idx].copy()
     metadata.index = metadata[0]
+
     sample_metadata_full = metadata.iloc[:, 3:].T.reset_index(drop=True)
     sample_metadata_full.columns = metadata[0]
 
     # track which positions survive the SubjectID filter
     valid_mask = sample_metadata_full["SubjectID"].notna()
     valid_positions = valid_mask[valid_mask].index.tolist()
+
     sample_metadata = sample_metadata_full[valid_mask].reset_index(drop=True)
 
     # expression matrix: probes × samples
     expr = pd.read_csv(path, skiprows=header_idx)
+
     non_sample_cols = [
-        c for c in ["ProbeSet", "LocusLink", "Symbol", "GeneSymbol", "GeneTitle", "Chromosome", "Cytoband"]
+        c for c in [
+            "ProbeSet",
+            "LocusLink",
+            "Symbol",
+            "GeneSymbol",
+            "GeneTitle",
+            "Chromosome",
+            "Cytoband",
+        ]
         if c in expr.columns
     ]
+
     sample_cols = [c for c in expr.columns if c not in non_sample_cols]
     sample_cols_valid = [sample_cols[i] for i in valid_positions]
 
@@ -388,18 +400,115 @@ def build_adni(args) -> ad.AnnData:
     obs.index = sample_cols_valid
 
     symbol_col = "Symbol" if "Symbol" in expr.columns else "GeneSymbol"
+
     var = pd.DataFrame(
-        {"symbol": expr[symbol_col].astype(str).values},
+        {
+            "symbol": expr[symbol_col].astype(str).values,
+        },
         index=expr["ProbeSet"].astype(str),
     )
+
     var.index.name = "gene_id"
     X.columns = var.index
 
-    adata = ad.AnnData(X=X.values, obs=obs, var=var)
+    # -----------------------------------------
+    # OPTIONAL: collapse probes -> gene symbols
+    # -----------------------------------------
+    if index_symbol:
+
+        # remove bad symbols
+        valid_symbol_mask = (
+            var["symbol"].notna()
+            & (var["symbol"] != "")
+            & (var["symbol"] != "---")
+            & (var["symbol"] != "nan")
+        )
+
+        var = var.loc[valid_symbol_mask]
+        X = X.loc[:, valid_symbol_mask.values]
+
+        # suffix extraction
+        def get_suffix(probe):
+            parts = probe.split("_", 1)
+            return parts[1] if len(parts) > 1 else ""
+
+        # priority map
+        probe_priority = {
+            "at": 0,
+            "a_at": 1,
+            "s_at": 2,
+            "x_at": 3,
+            "PM_at": 4,
+            "PM_s_at": 5,
+            "PM_x_at": 6,
+            "3_at": 7,
+            "5_at": 8,
+            "M_at": 9,
+            "MA_at": 10,
+            "MB_at": 11,
+            "alu_at": 12,
+        }
+
+        suffixes = [get_suffix(p) for p in var.index]
+
+        priorities = [
+            probe_priority.get(s, 999)
+            for s in suffixes
+        ]
+
+        variances = X.var(axis=0).values
+
+        probe_info = pd.DataFrame(
+            {
+                "probe": var.index,
+                "symbol": var["symbol"].values,
+                "suffix": suffixes,
+                "priority": priorities,
+                "variance": variances,
+            }
+        )
+
+        # best = lowest priority, then highest variance
+        probe_info = probe_info.sort_values(
+            ["symbol", "priority", "variance"],
+            ascending=[True, True, False],
+        )
+
+        best = probe_info.drop_duplicates(
+            subset="symbol",
+            keep="first",
+        )
+
+        keep_probes = best["probe"].tolist()
+
+        X = X[keep_probes]
+        var = var.loc[keep_probes]
+
+        # reindex by gene symbol
+        var.index = var["symbol"]
+        var.index.name = "gene_symbol"
+
+        X.columns = var.index
+
+    else:
+        X.columns = var.index
+
+    adata = ad.AnnData(
+        X=X.values,
+        obs=obs,
+        var=var,
+    )
+
     adata.uns["feature_type"] = "gene_expression"
     adata.uns["inputs"] = args.inputs
+    adata.uns["index_symbol"] = index_symbol
+
     adata.write_h5ad(out_path)
-    logger.info(f"Saved ADNI AnnData: {adata.shape} → {out_path}")
+
+    logger.info(
+        f"Saved ADNI AnnData: {adata.shape} → {out_path}"
+    )
+
     return adata
 
 

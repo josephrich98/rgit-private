@@ -46,9 +46,61 @@ pip install -e .[processing,notebooks,dev]
 
 Python 3.10+ is recommended. Dependencies are declared in `pyproject.toml`.
 
+## Checking math
+``bash
+cd rgit_lean && ./check.sh
+```
+
 ## Usage
 
 Analysis notebooks are in `notebooks/`. Reusable estimation utilities live in the `rgit/` package. Batch scripts for large-scale runs are in `scripts/`.
+
+### Reproducing the analysis without the notebook
+
+The full recoverability pipeline that `notebooks/radiogenomic_recoverability.ipynb`
+orchestrates is also packaged as importable code, so it can be reproduced after a
+plain `pip install rgit` — no notebook, and (for the synthetic case) no data on disk.
+
+With no `.h5ad` files it runs the synthetic probabilistic-CCA dataset with known
+ground truth, writing `stats.json` and figures to the output directory:
+
+```bash
+# console script (installed with the package)
+rgit-recoverability --output-dir out/synthetic
+
+# real data
+rgit-recoverability \
+    --genomics data/tcga_kirc/genomics/mutated_genes.h5ad \
+    --imaging  data/tcga_kirc/imaging/tumor_radimagenet.h5ad \
+    --genomics-data-type variant \
+    --output-dir out/kirc
+```
+
+Or from Python:
+
+```python
+import rgit
+
+# synthetic ground-truth run (nothing needed on disk)
+report = rgit.run_recoverability_analysis(
+    rgit.RecoverabilityConfig(output_dir="out/synthetic")
+)
+print(report.stats["effective_identifiable_rank"]["rank"])
+
+# real cohort
+report = rgit.run_recoverability_analysis(
+    genomics_h5ad="data/.../mutated_genes.h5ad",
+    imaging_h5ad="data/.../tumor_radimagenet.h5ad",
+    genomics_data_type="variant",
+    output_dir="out/kirc",
+)
+```
+
+Every knob the notebook exposes lives on `rgit.RecoverabilityConfig`; the resolved
+config is written next to `stats.json` for provenance. Only the core dependencies
+are required — `scanpy` (HVG selection) falls back to variance ranking, and the
+RadImageNet feature extractor (`torch`) is loaded lazily, so neither is needed to
+run the recoverability analysis itself.
 
 ### Synthetic data
 papermill notebooks/radiogenomic_recoverability.ipynb notebooks/out/radiogenomic_recoverability_output_synthetic.ipynb  # synthetic data
@@ -85,13 +137,14 @@ done
 wget -O data/nsclc/imaging/manifest.tcia https://www.cancerimagingarchive.net/wp-content/uploads/NSCLC_Radiogenomics-6-1-21-Version-4.tcia
 wget -O data/nsclc/imaging/metadata.xlsx https://www.cancerimagingarchive.net/wp-content/uploads/NSCLC_Radiogenomics-6-1-21-Version-4-nbia-digest.xlsx
 wget -O data/nsclc/genomics/gene_expression.txt.gz https://ftp.ncbi.nlm.nih.gov/geo/series/GSE103nnn/GSE103584/suppl/GSE103584%5FR01%5FNSCLC%5FRNAseq%2Etxt%2Egz
-nbia-data-retriever --cli /home/jrich/Desktop/rgit/data/nsclc/imaging/manifest.tcia -d /home/jrich/Desktop/rgit/data/nsclc/imaging/dicom -v -f
+nbia-data-retriever --cli data/nsclc/imaging/manifest.tcia -d data/nsclc/imaging/dicom -v -f
 python scripts/make_imaging_matrix.py -o data/nsclc/imaging/organ_radiomics.h5ad -m data/nsclc/imaging/metadata.csv --mask_col organ_mask --embedder pyradiomics --label 1
 python scripts/make_genomics_matrix.py -o data/nsclc/genomics/gene_expression.h5ad --dataset nsclc --feature gene_expression data/nsclc/genomics/gene_expression.txt.gz
 
 ### ADNI
 python scripts/process_imaging_adni.py
-python scripts/make_genomics_matrix.py -o data/adni/genomics/gene_expression.h5ad --dataset adni --feature gene_expression /home/jrich/Desktop/rgit/data/adni/genomics/ADNI_Gene_Expression_Profile.csv
+python scripts/make_genomics_matrix.py -o data/adni/genomics/gene_expression.h5ad --dataset adni --feature gene_expression data/adni/genomics/ADNI_Gene_Expression_Profile.csv
+python /home/jrich/Desktop/rgit-private/scripts/make_adni_variant_matrix.py --inputs /home/jrich/Desktop/rgit-private/data/adni/genomics/WGS_Omni2.5M_20140220 --reference /home/jrich/data/reference/gatk_grch37/Homo_sapiens_assembly19.fasta --data-sources /home/jrich/data/reference/gatk_grch37/funcotator_dataSources.v1.8.hg19.20230908g --out-maf /home/jrich/Desktop/rgit-private/data/adni/genomics/WGS_Omni2.5M_20140220/genotype.maf.gz --out /home/jrich/Desktop/rgit-private/data/adni/genomics/genotype.h5ad --filter-impact --groupby-gene
 
 
 ## Status

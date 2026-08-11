@@ -38,7 +38,9 @@ def run_fastsurfer(
     subject_id = subject_id.replace(".nii", "")
     subject_id = subject_id.replace(".mgz", "")
 
-    if os.path.exists(output_dir / subject_id) and not overwrite:
+    output_file = output_dir / subject_id / "mri" / "aparc.DKTatlas+aseg.deep.mgz"
+    
+    if os.path.exists(output_dir / subject_id) and not overwrite and output_file.exists() and output_file.stat().st_size > 0:
         print(f"Output directory already exists, skipping: {output_dir}")
         return
 

@@ -25,6 +25,8 @@
 
 \newcommand{\synfig}[1]{notebooks/figures/synthetic/gene_expression_synthetic/imaging_synthetic/#1}
 \newcommand{\kircfig}[1]{notebooks/figures/tcga_kirc/gene_expression/organ_radiomics/#1}
+\newcommand{\wsifig}[1]{notebooks/figures/tcga_kirc/gene_expression/wsi/#1}
+\input{notebooks/figures/tcga_kirc/gene_expression/wsi/wsi_macros.tex}
 \newcommand{\nsclcfig}[1]{notebooks/figures/nsclc/gene_expression/organ_radiomics_subset/#1}
 \newcommand{\adnifig}[1]{notebooks/figures/adni/gene_expression/fastsurfer/#1}
 
@@ -1772,6 +1774,92 @@ chance (AUC $\approx 0.65$) while the non-identifiable group sits at $0.5$, and
 the random forest does not materially exceed the logistic ceiling --- a direct,
 gene-level corroboration that the recoverability score, not gene identity per
 se, governs what imaging can read out (Fig.~\ref{fig:kirc-pergene}).
+
+\subsection{Histopathology vs.\ radiology: the same channel through a microscope}
+\label{sec:kirc-wsi}
+The CT channel is narrow because a macroscopic attenuation map is a coarse view
+of a molecular state assayed in the tumour tissue itself. A natural test of this
+reading is to swap the imaging modality for digital \emph{histopathology} --- the
+H\&E whole-slide images (WSI) of the same TCGA-KIRC tumours --- while holding the
+genomic target, the preprocessing, and the working-dimension budget fixed. We
+pull the GDC diagnostic and tissue slides ($\wsiNslides$ ``\texttt{.svs}'' images
+over $\wsiNcases$ cases, mapped to Case ID and tumour/normal status through the
+GDC \texttt{sample\_sheet.tsv}), and extract an interpretable handcrafted feature
+bank that mirrors the radiomics families --- $\wsiNfeat$ descriptors in four
+groups: H\&E \emph{stain} (Ruifrok--Johnston colour-deconvolution optical
+densities), grayscale \emph{first-order} intensity, \emph{texture}
+(Haralick GLCM + rotation-invariant LBP), and nuclear \emph{structure}
+(haematoxylin-dense connected-component morphology). A case's per-slide features
+are averaged over its tumour slides into one case-level vector
+(\texttt{scripts/build\_kirc\_wsi\_features.py}, written to
+\texttt{data/tcga\_kirc/wsi/wsi\_tumor.h5ad}), so a WSI feature vector aligns to
+the same case's expression profile exactly as a radiomic vector does. We then run
+the identical honest pipeline (Gaussian-copula marginals, symmetric PCA to
+$p^\star = d^\star = \lfloor n/5\rfloor$, $5$-fold CV, $1000$-permutation
+CV-null; \texttt{scripts/kirc\_wsi\_recoverability.py}).
+
+The contrast is large and in the predicted direction. On the same expression
+target and the same $n$-budget, histopathology recovers the leading genomic
+direction roughly four times as strongly as CT:
+$\hat R_1^{\mathrm{cv}} = \wsiRone$ from WSI ($n=\wsiN$) versus
+$\wsiRoneCT$ from CT organ radiomics ($n=\wsiNCT$), with the effective
+image-identifiable rank rising to $\hat k_{\mathrm{eff}} = \wsiRank$
+(all three leading directions clear their CV-permutation null at $p \le
+\wsiPmax$) and the top-$3$ cumulative mutual information climbing from
+$\wsiMICT$ to $\wsiMI$ bits (Fig.~\ref{fig:kirc-wsi-vs-ct}). This is the same
+weak-but-real channel viewed at the resolution where the genomics is actually
+generated: the microscope sees the cellular morphology --- nuclear density,
+stain distribution, texture --- that co-varies with transcriptional state, where
+the CT voxel sees only its macroscopic shadow.
+
+\paragraph{Tumour vs.\ adjacent-normal.}
+If the histology--expression coupling is genuinely tumour-biological rather than a
+generic tissue or batch effect, a patient's tumour-derived expression should be
+reflected in their \emph{tumour} slides but not in their \emph{adjacent-normal}
+slides. It is: re-running the probe on each case's normal slides collapses the
+leading recoverability to the floor, $\hat R_1^{\mathrm{cv}} = \wsiRoneNormal$
+($n=\wsiNnormal$) against $\wsiRone$ for tumour --- a gap that survives
+size-matching the larger group to the smaller ($\wsiRoneTumorM$ vs.\
+$\wsiRoneNormalM$ at $n=\wsiNmatched$, Fig.~\ref{fig:kirc-wsi-tumor-normal}), so
+it is not merely the larger tumour-slide count. The molecular signal is read out
+of the malignant tissue, not the patient's normal kidney.
+
+\paragraph{Deconfounding.}
+A four-fold-larger channel is also four times the opportunity for a confound, so
+we apply the same control that vindicated the CT channel
+(Section~\ref{sec:kirc-deconfound}), with the WSI-appropriate batch term: age,
+sex, ethnicity, race, and --- in place of CT scanner manufacturer --- the TCGA
+\emph{tissue source site} (the barcode institution code, a proxy for
+per-laboratory H\&E staining and fixation batch). Residualizing both modalities on
+this design leaves the channel untouched:
+$\hat R_1^{\mathrm{cv}} = \wsiDecRaw \to \wsiDecDecon$
+(CV-permutation $p \le 0.001$ throughout, $\hat k_{\mathrm{eff}}$ unchanged at
+$\wsiRank$). The histology--genomics coupling is therefore not an artefact of
+demographics or staining site; like the CT channel, it is robust to the measured
+common causes, but an order of magnitude wider.
+
+\begin{figure}[tbp]
+\centering
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\wsifig{wsi_vs_ct.pdf}}
+\caption{}\label{fig:kirc-wsi-vs-ct}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\linewidth}\centering
+\includegraphics[width=\linewidth]{\wsifig{tumor_vs_normal.pdf}}
+\caption{}\label{fig:kirc-wsi-tumor-normal}
+\end{subfigure}
+\caption{TCGA-KIRC histopathology channel. \textbf{(a)} Honest per-direction
+$\hat R_i^{\mathrm{cv}}$ for the \emph{same} HVG-expression target recovered from
+WSI histopathology (green) versus CT organ radiomics (blue), identical
+copula/PCA pipeline and $n$-budget; the leading histology recoverability is
+$\sim 4\times$ the radiology one. \textbf{(b)} The histology channel is
+tumour-specific: tumour slides (red) carry the expression signal that
+adjacent-normal slides (blue) do not, before and after size-matching. All
+numbers reproduced by \texttt{scripts/kirc\_wsi\_recoverability.py} (and
+\texttt{kirc\_wsi\_deconfound.py}), saved to
+\texttt{notebooks/figures/tcga\_kirc/gene\_expression/wsi/stats.json}.}
+\label{fig:kirc-wsi}
+\end{figure}
 
 \subsection{Implications}
 \label{sec:kirc-implications}

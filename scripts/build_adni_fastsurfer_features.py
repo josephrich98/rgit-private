@@ -139,6 +139,8 @@ def main():
     args = parser.parse_args()
     img_root, out = args.img_root, args.out
 
+    out.parent.resolve().mkdir(parents=True, exist_ok=True)
+
     n_proc = int(os.environ.get("N_PROC", "16"))
     dirs = sorted(os.listdir(img_root))
     jobs = [(subject_id(d), d, img_root) for d in dirs if subject_id(d)]
@@ -165,7 +167,6 @@ def main():
         var=pd.DataFrame(index=df.columns),
     )
     adata.var_names_make_unique()
-    out.parent.mkdir(parents=True, exist_ok=True)
     adata.write_h5ad(out)
     print(f"saved {adata.shape} -> {out}", flush=True)
 

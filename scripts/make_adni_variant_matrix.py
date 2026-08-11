@@ -15,7 +15,7 @@ and can be written out as:
 Funcotator emits variant-level annotation only, so the per-patient dosage in
 --out is read from the genotypes (PLINK via `--extract --recode A`, or the VCF
 GT fields), keyed to the annotation by variant. --filter-impact keeps only
-impactful variants (indels + medium/high impact); --groupby-gene sums dosage
+protein-altering / splice variants (see FUNCTIONAL_CLASSIFICATIONS); --groupby-gene sums dosage
 over each gene's variants instead of keeping per-variant columns. --apoe merges
 an ADNI APOE table (APOERES.csv) into --out, since APOE's defining SNPs are not
 on the Omni2.5M array (adds APOE_e4/APOE_e2 dosage + obs['APOE_genotype']).
@@ -67,6 +67,96 @@ def download_funcotator_data_sources(data_sources_path, somatic=True, ref_versio
     )
 
 
+def _read_fai_lengths(reference):
+    """Return {contig: length} from the reference .fai (created with samtools if absent)."""
+    fai = reference + ".fai"
+    if not os.path.exists(fai):
+        subprocess.run(f"samtools faidx {reference}", shell=True, check=True)
+    lengths = {}
+    with open(fai) as fh:
+        for line in fh:
+            name, length = line.split("\t")[:2]
+            lengths[name] = int(length)
+    return lengths
+
+
+def _vcf_contigs(input_vcf, ref_lengths):
+    """Contigs present in a tabix-indexed VCF that also exist in the reference."""
+    try:
+        out = subprocess.run(f"tabix -l {input_vcf}", shell=True, check=True,
+                             capture_output=True, text=True).stdout.split()
+        contigs = [c for c in out if c in ref_lengths]
+        if contigs:
+            return contigs
+    except subprocess.CalledProcessError:
+        pass
+    opener = gzip.open if input_vcf.endswith(".gz") else open       # fallback: first data row
+    with opener(input_vcf, "rt") as fh:
+        for line in fh:
+            if not line.startswith("#"):
+                c = line.split("\t", 1)[0]
+                return [c] if c in ref_lengths else []
+    return []
+
+
+def _concat_mafs(maf_paths, out_maf):
+    """Concatenate MAFs into out_maf: the whole first file, then only the data rows
+    (skipping the ## header block and the single column-header line) of the rest."""
+    with open(out_maf, "w") as out:
+        first = True
+        for path in maf_paths:
+            if not path or not os.path.exists(path):
+                continue
+            with open(path) as fh:
+                if first:
+                    for line in fh:
+                        out.write(line)
+                    first = False
+                else:
+                    seen_header = False
+                    for line in fh:
+                        if line.startswith("#"):
+                            continue
+                        if not seen_header:               # the column-header row
+                            seen_header = True
+                            continue
+                        out.write(line)
+
+
+def _funcotate_interval(input_vcf, out_maf, reference, ref_version, data_sources,
+                        tmp_dir, contig, start, end, min_window=256):
+    """Funcotate input_vcf restricted to contig:start-end (via the VCF index, no
+    rewriting). Funcotator throws an *uncaught* exception on certain boundary-
+    spanning indels ("Query asks for data past end of contig"), which would abort
+    the whole run; on any failure we bisect the interval and recurse, dropping a
+    window of <= min_window bp that cannot be annotated. Returns the list of MAF
+    files produced for this interval (empty if the whole interval was dropped)."""
+    interval = f"{contig}:{start}-{end}"
+    cmd = (
+        f"gatk Funcotator -R {reference} --ref-version {ref_version} "
+        f"-V {input_vcf} -O {out_maf} --output-file-format MAF "
+        f"--data-sources-path {data_sources} --tmp-dir {tmp_dir} "
+        f"-L {interval} --verbosity ERROR "
+        # b37 VCF contig lengths can differ from the reference dict; coords are fine.
+        f"--disable-sequence-dictionary-validation"
+    )
+    if subprocess.run(cmd, shell=True).returncode == 0:
+        return [out_maf]
+    if os.path.exists(out_maf):
+        os.remove(out_maf)                                 # drop the partial/failed shard
+    if end - start <= min_window:
+        logger.warning(f"Funcotator cannot annotate {interval} ({end - start + 1} bp); dropping it.")
+        return []
+    mid = (start + end) // 2
+    logger.warning(f"Funcotator failed on {interval}; bisecting at {mid}")
+    return (
+        _funcotate_interval(input_vcf, out_maf + ".l", reference, ref_version,
+                            data_sources, tmp_dir, contig, start, mid, min_window)
+        + _funcotate_interval(input_vcf, out_maf + ".r", reference, ref_version,
+                              data_sources, tmp_dir, contig, mid + 1, end, min_window)
+    )
+
+
 def run_funcotator(input_vcf, reference, data_sources=None, ref_version="hg19",
                    out_prefix=None, gzip_output=True, somatic=True):
     if not os.path.exists(reference):
@@ -89,37 +179,40 @@ def run_funcotator(input_vcf, reference, data_sources=None, ref_version="hg19",
     if out_prefix is None:
         out_prefix = Path(input_vcf).with_suffix("").with_suffix("")
     out_maf = f"{out_prefix}.funcotated.maf"
-    # Keep GATK's scratch off the (often small) system /tmp by co-locating it
-    # with the output, and silence the per-variant dbSNP WARN flood that would
-    # otherwise produce tens of GB of logs on a multi-million-variant VCF.
+    # Keep GATK's scratch off the (often small) system /tmp by co-locating it with
+    # the output.
     tmp_dir = os.path.join(os.path.dirname(os.path.abspath(out_maf)), "gatk_tmp")
     os.makedirs(tmp_dir, exist_ok=True)
-    cmd = (
-        f"gatk Funcotator "
-        f"-R {reference} "
-        f"--ref-version {ref_version} "
-        f"-V {input_vcf} "
-        f"-O {out_maf} "
-        f"--output-file-format MAF "
-        f"--data-sources-path {data_sources} "
-        f"--tmp-dir {tmp_dir} "
-        f"--verbosity ERROR "
-        # PLINK-derived VCFs carry contig lengths that differ from the reference
-        # dictionary; the genotype coordinates are correct, so skip the check.
-        f"--disable-sequence-dictionary-validation"
-    )
 
-    if not os.path.exists(out_maf):
-        if not os.path.exists(f"{reference}.fai"):
-            subprocess.run(f"samtools faidx {reference}", shell=True, check=True)
+    if os.path.exists(out_maf):
+        logger.info(f"Funcotated MAF {out_maf} already exists. Skipping Funcotator annotation.")
+    else:
+        lengths = _read_fai_lengths(reference)
         if not os.path.exists(reference.replace(".fasta", ".dict")):
             subprocess.run(f"gatk CreateSequenceDictionary -R {reference}", shell=True, check=True)
         if not any(os.path.exists(f"{input_vcf}{ext}") for ext in (".idx", ".tbi")):
             subprocess.run(f"gatk IndexFeatureFile -I {input_vcf}", shell=True, check=True)
-        logger.info(f"Annotating {input_vcf} → {out_maf}")
-        subprocess.run(cmd, shell=True, check=True)
-    else:
-        logger.info(f"Funcotated MAF {out_maf} already exists. Skipping Funcotator annotation.")
+        contigs = _vcf_contigs(input_vcf, lengths)
+        if not contigs:
+            raise ValueError(f"No reference-matching contigs found in {input_vcf}")
+        logger.info(f"Annotating {input_vcf} → {out_maf} (contigs: {','.join(contigs)})")
+        # Build per interval into a temporary path and only move it onto out_maf on
+        # success, so an aborted/partial annotation is never mistaken for a finished
+        # one by the skip-on-exists check above.
+        work = out_maf + ".building"
+        produced = []
+        for c in contigs:
+            produced += _funcotate_interval(input_vcf, f"{work}.{c}", reference,
+                                            ref_version, data_sources, tmp_dir,
+                                            c, 1, lengths[c])
+        produced = [p for p in produced if p and os.path.exists(p)]
+        if not produced:
+            raise RuntimeError(f"Funcotator produced no annotation for {input_vcf}")
+        _concat_mafs(produced, work)
+        for p in produced:
+            if os.path.exists(p):
+                os.remove(p)
+        os.replace(work, out_maf)
 
     if gzip_output:
         out_maf_gz = f"{out_maf}.gz"
@@ -266,27 +359,42 @@ def resolve_vcfs(inputs, reference, plink_cmd="plink", prefix=None):
     return vcfs
 
 
-# MAF Variant_Classification values considered functionally impactful (non-silent).
-HIGH_IMPACT_CLASSIFICATIONS = {
-    "Missense_Mutation", "Nonsense_Mutation", "Nonstop_Mutation",
-    "Frame_Shift_Del", "Frame_Shift_Ins", "In_Frame_Del", "In_Frame_Ins",
-    "Splice_Site", "Splice_Region", "Translation_Start_Site",
+# MAF Variant_Classification values that alter the protein product or splicing —
+# the variants most likely to matter functionally. Everything else (synonymous
+# "Silent", 5'/3'UTR, Intron, intergenic IGR, 5'/3'Flank, RNA, and uncertain
+# COULD_NOT_DETERMINE / DE_NOVO_START calls) is dropped. Matched case-insensitively
+# because Funcotator mixes MAF-style names (Missense_Mutation) with raw GENCODE
+# enums (START_CODON_SNP).
+FUNCTIONAL_CLASSIFICATIONS = {
+    "missense_mutation",
+    "nonsense_mutation",
+    "nonstop_mutation",
+    "frame_shift_del", "frame_shift_ins",
+    "in_frame_del", "in_frame_ins",
+    "splice_site", "splice_region",
+    "translation_start_site",
+    "start_codon_snp", "start_codon_del", "start_codon_ins",
 }
-INDEL_TYPES = {"INS", "DEL"}
 
 
 def filter_impactful_variants(df):
-    """Keep indels plus medium/high-impact variants (by Variant_Classification or IMPACT)."""
-    import pandas as pd
+    """Keep only protein-altering / splice-disrupting variants.
 
-    mask = pd.Series(False, index=df.index)
-    if "Variant_Classification" in df.columns:
-        mask |= df["Variant_Classification"].isin(HIGH_IMPACT_CLASSIFICATIONS)
-    if "Variant_Type" in df.columns:
-        mask |= df["Variant_Type"].astype(str).str.upper().isin(INDEL_TYPES)
-    if "IMPACT" in df.columns:
-        mask |= df["IMPACT"].astype(str).str.upper().isin({"MODERATE", "HIGH"})
-    return df[mask]
+    Best-practice functional filter for a gene-level mutation matrix: a variant
+    is kept iff its Variant_Classification is in FUNCTIONAL_CLASSIFICATIONS
+    (missense, nonsense, nonstop, frameshift/in-frame indels, splice, start-codon
+    disruption). This deliberately drops the synonymous, UTR, intronic,
+    intergenic, flanking and RNA variants that dominate a WGS callset — and, unlike
+    the previous rule, does NOT keep an indel merely for being an indel (the vast
+    majority of indels are intronic/intergenic and functionally irrelevant). No
+    allele-frequency cap is applied: common protein-altering variants are kept
+    too, and these VCFs carry no reliable population-AF annotation to filter on.
+    """
+    if "Variant_Classification" not in df.columns:
+        logger.warning("No Variant_Classification column found; keeping all variants.")
+        return df
+    vc = df["Variant_Classification"].astype(str).str.strip().str.lower()
+    return df[vc.isin(FUNCTIONAL_CLASSIFICATIONS)]
 
 
 def annotate_variants(df, groupby_gene=False):
@@ -357,8 +465,50 @@ def _plink_extract_dosage(prefix, names, plink_cmd="plink"):
                              if c in raw.columns])
 
 
+def _vcf_to_maf_variant_ids(chrom, pos, ref, alt_field):
+    """Map a VCF site (CHROM, POS, REF, ALT) to Funcotator MAF-style variant_id(s).
+
+    Funcotator's MAF uses TCGA coordinate conventions, so a VCF-style
+    "CHROM:POS REF>ALT" key does not match it for indels (and multiallelic sites
+    are split one MAF row per ALT). This reproduces the convention so the
+    genotype dosage keys line up with annotate_variants()'s MAF-derived ids:
+
+      - substitution (len(REF)==len(ALT)): kept verbatim, e.g. "1:10177ACCT>CCCT"
+        (SNPs and ONP/DNP/TNP are NOT trimmed by Funcotator)
+      - insertion  (REF a prefix of ALT): "{chrom}:{POS+len(REF)-1}->{inserted}"
+      - deletion   (ALT a prefix of REF): "{chrom}:{POS+len(ALT)}{deleted}>-"
+
+    Returns a list of (variant_id, allele_index) pairs, one per ALT allele, where
+    allele_index is the GT digit (1-based) used to count that allele's dosage.
+    Spanning-deletion ('*') and missing ('.') alleles, and complex indels with no
+    clean anchor base, are skipped (they do not appear in the Funcotator MAF the
+    same way).
+    """
+    out = []
+    for i, alt in enumerate(alt_field.split(","), start=1):
+        if alt in ("", ".", "*"):
+            continue
+        if len(ref) == len(alt):
+            vid = f"{chrom}:{pos}{ref}>{alt}"
+        elif len(alt) > len(ref) and alt.startswith(ref):       # insertion
+            vid = f"{chrom}:{int(pos) + len(ref) - 1}->{alt[len(ref):]}"
+        elif len(ref) > len(alt) and ref.startswith(alt):       # deletion
+            vid = f"{chrom}:{int(pos) + len(alt)}{ref[len(alt):]}>-"
+        else:
+            continue                                            # complex; not matched
+        out.append((vid, i))
+    return out
+
+
 def _vcf_parse_dosage(vcf, keep_ids, chunksize=20000):
-    """Parse VCF GT fields → DataFrame patient × variant_id additive dosage (NaN=missing)."""
+    """Parse VCF GT fields → DataFrame patient × variant_id additive dosage (NaN=missing).
+
+    Sample fields are "GT:AD:DP:GQ:PL", so only the GT subfield is read; dosage
+    for ALT allele i is the number of GT alleles equal to i (0/1/2, or hemizygous
+    1 on the sex chromosomes), NaN if any allele is missing. Multiallelic sites
+    contribute one column per ALT allele, keyed by Funcotator MAF-style
+    variant_id so they align with the MAF annotation.
+    """
     import numpy as np
     import pandas as pd
 
@@ -377,19 +527,31 @@ def _vcf_parse_dosage(vcf, keep_ids, chunksize=20000):
                          compression="gzip" if vcf.endswith(".gz") else None)
     parts = []
     for chunk in reader:
-        vid = chunk["#CHROM"] + ":" + chunk["POS"] + chunk["REF"] + ">" + chunk["ALT"]
-        sub = chunk[vid.isin(keep_ids)] if keep_ids is not None else chunk
-        if not len(sub):
+        chrom = chunk["#CHROM"].to_numpy(dtype=str)
+        pos = chunk["POS"].to_numpy(dtype=str)
+        ref = chunk["REF"].to_numpy(dtype=str)
+        alt = chunk["ALT"].to_numpy(dtype=str)
+        rows, vids, alleles = [], [], []
+        for r in range(len(chunk)):
+            for vid, ai in _vcf_to_maf_variant_ids(chrom[r], pos[r], ref[r], alt[r]):
+                if keep_ids is None or vid in keep_ids:
+                    rows.append(r)
+                    vids.append(vid)
+                    alleles.append(ai)
+        if not rows:
             continue
-        arr = sub[samples].to_numpy(dtype=str)
-        dose = np.char.count(arr, "1").astype(np.float32)        # alt-allele count
-        dose[np.char.count(arr, ".") > 0] = np.nan               # missing genotype
-        parts.append(pd.DataFrame(dose, index=vid[sub.index].values, columns=samples))
+        # Only the matched rows need their (large) genotype fields parsed.
+        arr = chunk[samples].to_numpy(dtype=str)[rows]
+        gt = np.char.partition(arr, ":")[..., 0]                 # GT token, e.g. "0/1"
+        missing = np.char.count(gt, ".") > 0
+        for k, (vid, ai) in enumerate(zip(vids, alleles)):
+            dose = np.char.count(gt[k], str(ai)).astype(np.float32)  # count allele ai
+            dose[missing[k]] = np.nan                            # any missing allele → missing
+            parts.append(pd.Series(dose, index=samples, name=vid))
     if not parts:
         return pd.DataFrame()
-    geno = pd.concat(parts)
-    geno = geno[~geno.index.duplicated(keep="first")]
-    return geno.T  # patient × variant_id
+    geno = pd.concat(parts, axis=1)                              # patient × variant_id
+    return geno.loc[:, ~geno.columns.duplicated(keep="first")]
 
 
 def build_dosage_matrix(vcf, keep_ids, plink_cmd="plink"):
@@ -520,7 +682,7 @@ def run(args):
     vcfs = resolve_vcfs(args.inputs, args.reference, plink_cmd=args.plink_cmd, prefix=args.prefix)
     logger.info(f"Found {len(vcfs)} VCF(s) to annotate")
 
-    frames = []
+    frames, total_before, total_after = [], 0, 0
     for vcf in vcfs:
         maf = run_funcotator(
             vcf,
@@ -531,15 +693,20 @@ def run(args):
             gzip_output=False,
             somatic=False,
         )
-        frames.append(pd.read_csv(maf, sep="\t", comment="#", low_memory=False))
+        frame = pd.read_csv(maf, sep="\t", comment="#", low_memory=False)
+        # Filter each per-chromosome MAF before concatenating: for WGS the
+        # impactful subset is a few percent of all variants, so this keeps peak
+        # memory bounded instead of holding every variant from 23 MAFs at once.
+        if args.filter_impact:
+            total_before += len(frame)
+            frame = filter_impactful_variants(frame)
+            total_after += len(frame)
+        frames.append(frame)
 
     combined = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
-    logger.info(f"Combined MAF: {combined.shape[0]:,} variants × {combined.shape[1]} columns")
-
     if args.filter_impact:
-        before = len(combined)
-        combined = filter_impactful_variants(combined)
-        logger.info(f"Impact filter: kept {len(combined):,}/{before:,} variants")
+        logger.info(f"Impact filter: kept {total_after:,}/{total_before:,} variants")
+    logger.info(f"Combined MAF: {combined.shape[0]:,} variants × {combined.shape[1]} columns")
 
     if args.out_maf:
         out_maf = args.out_maf if args.out_maf.endswith(".gz") else args.out_maf + ".gz"
@@ -598,8 +765,9 @@ def build_parser():
                         help="Output patient × variant matrix (.h5ad); adata.var "
                              "holds the MAF annotation columns.")
     parser.add_argument("--filter-impact", action="store_true",
-                        help="Keep only impactful variants (indels and medium/high-impact "
-                             "Variant_Classification / IMPACT).")
+                        help="Keep only protein-altering / splice-disrupting variants "
+                             "(missense, nonsense, nonstop, frameshift/in-frame indels, "
+                             "splice, start-codon); drops synonymous/UTR/intronic/intergenic.")
     parser.add_argument("--groupby-gene", action="store_true",
                         help="Build the matrix per gene (Hugo_Symbol) instead of per variant.")
     parser.add_argument("--apoe", default=None,

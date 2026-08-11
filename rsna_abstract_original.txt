@@ -1,0 +1,9 @@
+Purpose: To establish an upper bound on genomic features that can be decoded from CT images of renal cell carcinoma, and to determine whether apparent radiogenomic signal is confounded by demographic features.
+
+Materials and Methods: We establish the upper bound as modelling genomics as a multivariate normal function, and modelling imaging as a linear function of genomics plus noise. EXPLAIN MORE HOW I GET THE UPPER BOUND, KEEPING IN MIND THIS IS A RADIOLOGY ABSTRACT. 190 patients from the multi-institutional Cancer Genome Atlas Kidney Renal Clear Cell Carcinoma (TCGA-KIRC) collection were analyzed (median age 59 years; 65 women; 75 stage III-IV).
+
+Results: DESCRIBE SOMETHING ALONG THE LINES OF HOW I CALCULATE THE UPPER BOUND FOR THIS DATASET. THEN I SUBSET TO ONLY KEEP THE GENES THAT ARE RELEVANT FOR KIDNEY CANCER, AND I KEEP A SIMILAR AMOUNT OF GENOMIC SIGNAL, INDICATING THAT THE REST OF GENES CONTRIBUTE BASICALLY NOT AT ALL TO THE IMAGING SIGNAL. THEN I SHOW THAT WHEN I ADJUST FOR DEMOGRAPHICS, THE GENOMIC SIGNAL IS LARGELY EXPLAINED BY DEMOGRAPHICS, INDICATING THAT THE APPARENT RADIOGENOMIC SIGNAL IS A DEMOGRAPHIC PROXY.
+
+Conclusion: XXX
+
+Clinical Relevance Statement: This study establishes an upper bound on the genomic features that can be decoded from CT images of renal cell carcinoma, demonstrating that much of the apparent radiogenomic signal is confounded by demographic features. By quantifying the contribution of relevant genomic features and adjusting for demographics, we provide insights into the limitations of radiogenomic analyses and highlight the importance of considering demographic confounding in imaging studies.
